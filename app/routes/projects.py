@@ -1135,10 +1135,24 @@ def get_project(
             .data or []
         )
 
+    # Add default values for fields that may be missing in memory mode
+    project_data = project_result.data[0]
+    project_data.setdefault("user_id", None)
+    project_data.setdefault("final_approval_status", False)
+    project_data.setdefault("customer_id", None)
+
+    # Add default values to understandings
+    understandings = fetch("understandings")
+    for u in understandings:
+        u.setdefault("user_answers", [])
+        u.setdefault("assumptions", [])
+        u.setdefault("clarification_questions", [])
+        u.setdefault("bullets", [])
+
     return ProjectStateResponse(
-        project=project_result.data[0],
+        project=project_data,
         user_requests=fetch("user_requests"),
-        understandings=fetch("understandings"),
+        understandings=understandings,
         builder_outputs=fetch("builder_outputs"),
         versions=fetch("versions"),
         review_reports=fetch("review_reports"),
