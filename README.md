@@ -1,4 +1,4 @@
-[models (1).py](https://github.com/user-attachments/files/29054772/models.1.py)
+[models (2).py](https://github.com/user-attachments/files/29054880/models.2.py)
 from __future__ import annotations
 
 from datetime import datetime
@@ -37,7 +37,7 @@ class ConfirmUnderstandingRequest(BaseModel):
 class ProjectRow(BaseModel):
     id: UUID
     user_id: str | None = None
-    customer_id: str | None  # MVP ownership — generated at project creation
+    customer_id: str | None = None  # MVP ownership — generated at project creation
     status: str
     scenario: str | None
     language: str
@@ -60,9 +60,9 @@ class UserRequestRow(BaseModel):
 class UnderstandingRow(BaseModel):
     id: UUID
     project_id: UUID
-    bullets: list[str]
-    assumptions: list[str]
-    clarification_questions: list[str]
+    bullets: list[str] = []
+    assumptions: list[str] = []
+    clarification_questions: list[str] = []
     user_answers: list[str] = []
     detected_scenario: str | None
     confidence: str | None
@@ -256,7 +256,7 @@ class GenerateRevisionResponse(BaseModel):
     output_id: UUID
     review_report_id: UUID
     status: str
-    preview_data: dict[str, Any]
+    preview_data: dict[str, Any] | None = None
     message: str
 
 
