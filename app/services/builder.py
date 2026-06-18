@@ -40,6 +40,16 @@ def generate_preview(
         from app.providers.builder.claude_code_builder import generate
         return generate(project, understanding, scenario_pattern)
 
+    if provider == "anthropic":
+        from app.providers.builder.anthropic_builder import generate
+        from app.config import settings as _s
+        return generate(project, understanding, scenario_pattern,
+                        api_key=_s.anthropic_api_key or None)
+
+    if provider in ("html", "html_v1"):
+        from app.providers.builder.html_builder import generate
+        return generate(project, understanding, scenario_pattern)
+
     # Default: mock
     from app.providers.builder.mock_builder import generate
     return generate(project, understanding, scenario_pattern)
