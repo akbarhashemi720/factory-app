@@ -531,7 +531,15 @@ def generate_preview_endpoint(project_id: UUID, x_customer_id: Optional[str] = H
             pass  # pattern lookup is best-effort; never blocks build
 
     builder_result = generate_preview(project, understanding, scenario_pattern)
+    # If html builder is configured but not available, fall back to inline html builder
     preview_data = builder_result["preview_data"]
+    if not preview_data.get("_is_html_preview"):
+        try:
+            from app.providers.builder.html_builder import generate as html_build
+            builder_result = html_build(project, understanding, scenario_pattern)
+            preview_data = builder_result["preview_data"]
+        except Exception:
+            pass  # keep mock preview if html builder unavailable
 
     # Determine next version number
     versions_result = (
