@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>کارخانه ساخت هوشمند</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600&display=swap" rel="stylesheet">
+
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -20,7 +18,7 @@
   --transition:.18s ease;
 }
 html{font-size:15px;-webkit-font-smoothing:antialiased}
-body{font-family:'Vazirmatn',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.65}
+body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.65}
 
 /* ─── Header ─── */
 .header{text-align:center;padding:34px 20px 0}
@@ -73,7 +71,7 @@ body{font-family:'Vazirmatn',sans-serif;background:var(--bg);color:var(--text);m
 /* ─── Inputs ─── */
 textarea,input[type=text]{
   width:100%;border:1px solid var(--border);border-radius:var(--rs);
-  font-family:'Vazirmatn',sans-serif;font-size:.84rem;color:var(--text);
+  font-family:Tahoma,Arial,sans-serif;font-size:.84rem;color:var(--text);
   background:#FAFAF8;padding:10px 12px;outline:none;line-height:1.6;
   resize:none;transition:border-color .15s}
 textarea:focus,input[type=text]:focus{border-color:var(--accent-bd)}
@@ -81,7 +79,7 @@ textarea{min-height:76px}
 
 /* ─── Buttons ─── */
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.btn{padding:8px 18px;border-radius:var(--rs);font-family:'Vazirmatn',sans-serif;
+.btn{padding:8px 18px;border-radius:var(--rs);font-family:Tahoma,Arial,sans-serif;
   font-size:.78rem;font-weight:500;cursor:pointer;border:1px solid var(--border);
   background:var(--surface);color:var(--text);transition:all .15s;
   display:inline-flex;align-items:center;gap:6px}
@@ -210,14 +208,14 @@ textarea{min-height:76px}
        in a non-technical, human-friendly way.
   -->
   <div class="card" id="panel-workspace">
-    <div class="card-title">پروژه‌های من</div>
-    <div id="workspace-loading" class="card-sub">یه لحظه، داریم پروژه‌هات رو می‌آریم…</div>
-    <div id="workspace-empty" class="hidden card-sub">هنوز پروژه‌ای نداری. از همین‌جا اولین پروژه‌ات را بساز.</div>
-    <div id="workspace-list"></div>
-    <div id="workspace-info" class="hidden msg-box" style="margin-top:8px;background:var(--surface);color:var(--muted);border-color:var(--border)"></div>
-    <div style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="card-title" style="margin:0">پروژه‌های من</div>
       <button class="btn btn-p btn-sm" onclick="handleNewProject()">➕ پروژه جدید</button>
     </div>
+    <div id="workspace-loading" class="card-sub">یه لحظه، داریم پروژه‌هات رو می‌آریم…</div>
+    <div id="workspace-empty" class="hidden card-sub">هنوز پروژه‌ای نداری.</div>
+    <div id="workspace-list"></div>
+    <div id="workspace-info" class="hidden msg-box" style="margin-top:8px;background:var(--surface);color:var(--muted);border-color:var(--border)"></div>
   </div>
 
   <!-- STEP 1: Request -->
@@ -769,7 +767,7 @@ async function handleRevision() {
 
   try {
     // Backend always uses current_version_id automatically — no need to pass version
-    const result = logInsight("revision_requested");
+    logInsight("revision_requested");
     const result = await api("POST", `/projects/${S.projectId}/revision`, {
       raw_revision_text: text,
     });
@@ -930,8 +928,8 @@ async function loadWorkspace() {
   try {
     const res = await fetch(BASE_URL + "/projects", {
       headers: { "Content-Type": "application/json", "X-Customer-Id": cid }
-    });
-    if (!res.ok) { hide("workspace-loading"); return; }
+    }).catch(() => null);
+    if (!res || !res.ok) { hide("workspace-loading"); show("workspace-empty"); return; }
     const data = await res.json();
     hide("workspace-loading");
 
@@ -972,6 +970,7 @@ async function loadWorkspace() {
     });
   } catch (e) {
     hide("workspace-loading");
+    show("workspace-empty");
   }
 }
 
@@ -1055,120 +1054,88 @@ function renderPreview(pd, isRevision) {
   document.getElementById("rev-badge-wrap").innerHTML = isRevision
     ? '<div class="rev-badge">✦ نسخه ویرایش‌شده</div>' : "";
 
-  const scenario = pd.scenario || "general";
-  let html = "";
+  let h = "";
 
-  if (pd.title)    html += `<div class="pv-title">${pd.title}</div>`;
-  if (pd.subtitle) html += `<div class="pv-sub">${pd.subtitle}</div>`;
-
-  if (scenario === "restaurant") {
-    const btns = [];
-    if (pd.primary_button)   btns.push(`<span class="pv-btn-main">${pd.primary_button}</span>`);
-    if (pd.secondary_button || pd.show_contact)
-      btns.push(`<span class="pv-btn-ghost">${pd.secondary_button || "تماس"}</span>`);
-    if (btns.length) html += `<div class="pv-btns">${btns.join("")}</div>`;
-    if (pd.menu_items?.length) {
-      html += `<div class="pv-menu">` +
-        pd.menu_items.map(m =>
-          `<div class="pv-menu-item"><div class="pv-menu-name">${m.name}</div><div class="pv-menu-price">${m.price}</div></div>`
-        ).join("") + `</div>`;
-    }
-
-  } else if (scenario === "dashboard") {
-    if (pd.cards?.length) {
-      html += `<div class="pv-cards">` +
-        pd.cards.map(c =>
-          `<div class="pv-card"><div class="pv-card-val">${c.value}</div><div class="pv-card-lbl">${c.label}</div></div>`
-        ).join("") + `</div>`;
-    }
-    // Fix 5: show report section when available
-    if (pd.show_report_section) {
-      html += `<div class="pv-sections" style="margin-top:8px">` +
-        ["گزارش‌های اخیر","فروش امروز","سفارش‌های جدید","رشد هفتگی"].map(
-          s => `<div class="pv-section">${s}</div>`
-        ).join("") + `</div>`;
-    }
-
-  } else if (scenario === "company_landing") {
-    if (pd.primary_button)
-      html += `<div class="pv-btns"><span class="pv-btn-main">${pd.primary_button}</span></div>`;
-    if (pd.sections?.length)
-      html += `<div class="pv-sections">` +
-        pd.sections.map(s => `<div class="pv-section">${s}</div>`).join("") + `</div>`;
-
-  } else if (scenario === "store") {
-    const btns = [];
-    if (pd.primary_button)   btns.push(`<span class="pv-btn-main">${pd.primary_button}</span>`);
-    if (pd.secondary_button) btns.push(`<span class="pv-btn-ghost">${pd.secondary_button}</span>`);
-    if (btns.length) html += `<div class="pv-btns">${btns.join("")}</div>`;
-    if (pd.sections?.length)
-      html += `<div class="pv-sections">` +
-        pd.sections.map(s => `<div class="pv-section">${s}</div>`).join("") + `</div>`;
-
-  } else if (scenario === "booking") {
-    const btns = [];
-    if (pd.primary_button) btns.push(`<span class="pv-btn-main">${pd.primary_button}</span>`);
-    if (pd.show_contact)   btns.push(`<span class="pv-btn-ghost">تماس</span>`);
-    if (btns.length) html += `<div class="pv-btns">${btns.join("")}</div>`;
-    // Fix 4: show available time slots
-    if (pd.time_slots?.length) {
-      html += `<div class="pv-sections" style="margin-top:8px">` +
-        pd.time_slots.map(t => `<div class="pv-section">⏱ ${t}</div>`).join("") + `</div>`;
-    }
-
-  } else if (scenario === "telegram_bot") {
-    if (pd.primary_button)
-      html += `<div class="pv-btns"><span class="pv-btn-main">${pd.primary_button}</span></div>`;
-    if (pd.sections?.length)
-      html += `<div class="pv-sections">` +
-        pd.sections.map(s => `<div class="pv-section">${s}</div>`).join("") + `</div>`;
-
-  } else if (scenario === "general_ordering" || scenario === "general_class" || scenario === "general_showcase") {
-    // Fix 6: render general_* scenarios with full content
-    const btns = [];
-    if (pd.primary_button)   btns.push(`<span class="pv-btn-main">${pd.primary_button}</span>`);
-    if (pd.secondary_button) btns.push(`<span class="pv-btn-ghost">${pd.secondary_button}</span>`);
-    if (btns.length) html += `<div class="pv-btns">${btns.join("")}</div>`;
-    if (pd.sections?.length)
-      html += `<div class="pv-sections">` +
-        pd.sections.map(s => `<div class="pv-section">${s}</div>`).join("") + `</div>`;
-
-  } else if (scenario.startsWith("family_")) {
-    // Need-family previews: generic but need-aware rendering.
-    // Internal family_ label is never shown — user only sees title, subtitle, sections.
-    if (pd.primary_button)
-      html += `<div class="pv-btns"><span class="pv-btn-main">${pd.primary_button}</span></div>`;
-    if (pd.cards?.length)
-      html += `<div class="pv-cards">` +
-        pd.cards.map(c =>
-          `<div class="pv-card"><div class="pv-card-val">${c.value}</div><div class="pv-card-lbl">${c.label}</div></div>`
-        ).join("") + `</div>`;
-    if (pd.sections?.length)
-      html += `<div class="pv-sections">` +
-        pd.sections.map(s => `<div class="pv-section">${s}</div>`).join("") + `</div>`;
-    if (pd.note)
-      html += `<div class="pv-note" style="margin-top:8px;font-size:.75rem;color:var(--muted)">${pd.note}</div>`;
-
-  } else {
-    // general: now has a starter preview with button and sections
-    if (pd.primary_button)
-      html += `<div class="pv-btns"><span class="pv-btn-main">${pd.primary_button}</span></div>`;
-    if (pd.sections?.length)
-      html += `<div class="pv-sections">` +
-        pd.sections.map(s => `<div class="pv-section">${s}</div>`).join("") + `</div>`;
-    if (pd.needs_more_info && !pd.primary_button)
-      html += `<div class="pv-note">برای ساخت دقیق‌تر اطلاعات بیشتری نیاز است.</div>`;
+  // Product name & type badge
+  if (pd.product_name) {
+    h += `<div class="pv-title">${pd.product_name}</div>`;
+  } else if (pd.title) {
+    h += `<div class="pv-title">${pd.title}</div>`;
   }
 
-  if (pd.revision_note) {
-    const parts = pd.revision_note.split(" | ").filter(Boolean);
-    if (parts.length)
-      html += `<div class="pv-note">✦ ${parts.join(" · ")}</div>`;
+  if (pd.subtitle) h += `<div class="pv-sub">${pd.subtitle}</div>`;
+
+  // Product type + target users
+  if (pd.product_type || pd.target_users) {
+    h += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">`;
+    if (pd.product_type) h += `<span style="background:var(--accent-10);color:var(--accent);padding:3px 10px;border-radius:20px;font-size:.75rem">${pd.product_type}</span>`;
+    if (pd.target_users) h += `<span style="background:var(--surface);border:1px solid var(--border);padding:3px 10px;border-radius:20px;font-size:.75rem">کاربران: ${pd.target_users}</span>`;
+    h += `</div>`;
   }
 
-  document.getElementById("preview-body").innerHTML =
-    html || `<div class="pv-note">پیش‌نمایش آماده شد.</div>`;
+  // Main sections
+  if (pd.sections && pd.sections.length) {
+    h += `<div style="margin:12px 0"><div style="font-size:.8rem;font-weight:600;margin-bottom:6px;color:var(--muted)">بخش‌های اصلی</div>`;
+    h += `<div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    pd.sections.forEach(s => {
+      h += `<span style="background:var(--surface);border:1px solid var(--border);padding:4px 12px;border-radius:6px;font-size:.78rem">${s}</span>`;
+    });
+    h += `</div></div>`;
+  }
+
+  // Features
+  if (pd.features && pd.features.length) {
+    h += `<div style="margin:12px 0"><div style="font-size:.8rem;font-weight:600;margin-bottom:6px;color:var(--muted)">قابلیت‌های اصلی</div><ul style="margin:0;padding-right:18px">`;
+    pd.features.forEach(f => {
+      h += `<li style="font-size:.78rem;margin-bottom:4px">${f}</li>`;
+    });
+    h += `</ul></div>`;
+  }
+
+  // User journey
+  if (pd.user_journey && pd.user_journey.length) {
+    h += `<div style="margin:12px 0"><div style="font-size:.8rem;font-weight:600;margin-bottom:6px;color:var(--muted)">مسیر کاربر</div>`;
+    pd.user_journey.forEach((step, i) => {
+      h += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:5px">
+        <span style="background:var(--accent);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0">${i+1}</span>
+        <span style="font-size:.78rem">${step}</span></div>`;
+    });
+    h += `</div>`;
+  }
+
+  // v1 scope
+  if (pd.v1_scope) {
+    h += `<div style="margin:12px 0;padding:10px 14px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:.78rem;font-weight:600;margin-bottom:4px;color:var(--accent)">نسخه اول چه می‌سازد</div>
+      <div style="font-size:.78rem;line-height:1.6">${pd.v1_scope}</div>
+    </div>`;
+  }
+
+  // Fallback for older mock data
+  if (!pd.product_name && !pd.features && !pd.user_journey) {
+    if (pd.primary_button || pd.secondary_button) {
+      h += `<div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap">`;
+      if (pd.primary_button) h += `<span class="pv-btn-main">${pd.primary_button}</span>`;
+      if (pd.secondary_button) h += `<span class="pv-btn-sec">${pd.secondary_button}</span>`;
+      h += `</div>`;
+    }
+    if (pd.cards && pd.cards.length) {
+      h += `<div class="pv-cards">`;
+      pd.cards.forEach(c => {
+        h += `<div class="pv-card"><div class="pv-card-label">${c.label||""}</div><div class="pv-card-value">${c.value||"—"}</div></div>`;
+      });
+      h += `</div>`;
+    }
+    if (pd.sections && pd.sections.length && !pd.features) {
+      h += `<div class="pv-sections">`;
+      pd.sections.forEach(s => { h += `<div class="pv-section-row">${s}</div>`; });
+      h += `</div>`;
+    }
+  }
+
+  document.getElementById("preview-body").innerHTML = h;
 }
+
 
 // ══════════════════════════════════════════════════════
 // UTILS
@@ -1347,24 +1314,28 @@ function handleFeedback() {
 
 // ── Reference field: show style hint when user types ─────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  const refEl  = document.getElementById("req-ref");
-  const refHint= document.getElementById("ref-hint");
-  if (refEl && refHint) {
-    refEl.addEventListener("input", () => {
-      refHint.style.display = refEl.value.trim() ? "block" : "none";
-    });
+  try {
+    const refEl  = document.getElementById("req-ref");
+    const refHint= document.getElementById("ref-hint");
+    if (refEl && refHint) {
+      refEl.addEventListener("input", () => {
+        refHint.style.display = refEl.value.trim() ? "block" : "none";
+      });
+    }
+    getOrCreateCustomerId();
+    // Insight session — fully silent, never blocks UI
+    try {
+      api("POST", "/insight/session", { tester_label: "" })
+        .then(r => { if(r && r.session_id) S.sessionId = r.session_id; })
+        .catch(() => {});
+    } catch(e) {}
+    setStatus("idle");
+    loadWorkspace();
+  } catch(e) {
+    // Even if something fails, show the workspace
+    setStatus("idle");
+    try { loadWorkspace(); } catch(e2) {}
   }
-  // Ensure customer_id is created/loaded on page open
-  getOrCreateCustomerId();
-
-  // Start insight session for this browser visit (silent — user never sees this)
-  api("POST", "/insight/session", { tester_label: "" })
-    .then(r => { S.sessionId = r.session_id || null; logInsight("app_opened"); })
-    .catch(() => {});  // fail silently
-
-  // Start on workspace view
-  setStatus("idle");
-  loadWorkspace();
 });
 </script>
 </body>
