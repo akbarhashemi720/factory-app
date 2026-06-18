@@ -35,13 +35,13 @@ class ConfirmUnderstandingRequest(BaseModel):
 
 class ProjectRow(BaseModel):
     id: UUID
-    user_id: str | None
-    customer_id: str | None  # MVP ownership — generated at project creation
+    user_id: str | None = None
+    customer_id: str | None = None  # MVP ownership — generated at project creation
     status: str
     scenario: str | None
     language: str
-    current_version_id: UUID | None
-    final_approval_status: bool
+    current_version_id: UUID | None = None
+    final_approval_status: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -59,10 +59,10 @@ class UserRequestRow(BaseModel):
 class UnderstandingRow(BaseModel):
     id: UUID
     project_id: UUID
-    bullets: list[str]
-    assumptions: list[str]
-    clarification_questions: list[str]
-    user_answers: list[str]
+    bullets: list[str] = []
+    assumptions: list[str] = []
+    clarification_questions: list[str] = []
+    user_answers: list[str] = []
     detected_scenario: str | None
     confidence: str | None
     confirmed_by_user: bool
@@ -255,7 +255,7 @@ class GenerateRevisionResponse(BaseModel):
     output_id: UUID
     review_report_id: UUID
     status: str
-    preview_data: dict[str, Any]
+    preview_data: dict[str, Any] | None = None
     message: str
 
 
