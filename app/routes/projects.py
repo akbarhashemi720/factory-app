@@ -1156,6 +1156,16 @@ def get_project(
         u.setdefault("assumptions", [])
         u.setdefault("clarification_questions", [])
         u.setdefault("bullets", [])
+        u.setdefault("detected_scenario", None)
+        u.setdefault("confidence", None)
+        u.setdefault("confirmed_by_user", False)
+        u.setdefault("confirmed_at", None)
+        u.setdefault("created_at", None)
+        u.setdefault("updated_at", None)
+        u.setdefault("diagnostic_question", None)
+        u.setdefault("diagnostic_options", [])
+        u.setdefault("primary_goal", None)
+        u.setdefault("business_domain", None)
 
     return ProjectStateResponse(
         project=project_data,
