@@ -16,8 +16,14 @@ _SYSTEM_PROMPT = """تو مدیر محصول یک کارخانه هوش مصنو
 
 همیشه به فارسی پاسخ بده.
 business_domain باید دقیقاً همان چیزی باشد که کاربر خواسته — نه نزدیک‌ترین قالب.
-اگر کاربر درباره آموزش زبان پرسید → business_domain = "آموزش زبان انگلیسی"، نه "رستوران".
+اگر کاربر درباره آموزش آشپزی پرسید → business_domain = "آموزش آشپزی ایرانی"، نه "آرایشگاه" یا "رزرو نوبت".
+اگر کاربر درباره آموزش زبان پرسید → business_domain = "آموزش زبان انگلیسی".
 اگر کاربر درباره سفارش غذا پرسید → business_domain = "سفارش غذا".
+
+قانون مهم برای انتخاب detected_scenario:
+هر چیزی که شامل «کلاس»، «دوره»، «آموزش» باشد — برای هر موضوعی (آشپزی، زبان، موسیقی، هنر و...) —
+باید scenario = general_class باشد، حتی اگر کلمه «ثبت‌نام» یا «برنامه زمانی» هم در متن باشد.
+scenario = booking فقط برای رزرو نوبت خدماتی مثل آرایشگاه، کلینیک، تعمیرگاه است — نه کلاس‌های آموزشی.
 
 اگر اطمینان کافی نداری، یک سؤال ساده و غیرفنی در missing_questions بگذار.
 هرگز سؤال فنی نپرس (API، دیتابیس، بک‌اند، هاستینگ و مانند آن)."""
@@ -52,6 +58,22 @@ _TOOL_SCHEMA = {
                 "type": "string",
                 "enum": ["restaurant", "store", "booking", "general_class",
                          "telegram_bot", "company_landing", "general"],
+                "description": (
+                    "Choose the SINGLE best match:\n"
+                    "- restaurant: cafes, restaurants, food ordering, menus\n"
+                    "- store: online shops, product sales, e-commerce\n"
+                    "- booking: appointment/time-slot booking for services like "
+                    "barbershops, salons, clinics, repair shops — NOT classes or courses\n"
+                    "- general_class: ANY teaching, courses, classes, workshops, training — "
+                    "including cooking classes, language classes, online/offline classes, "
+                    "skill courses, educational programs of any kind. If the user mentions "
+                    "'کلاس' (class), 'دوره' (course), 'آموزش' (teaching/education) for ANY "
+                    "subject (cooking, language, music, art, etc.) — always choose general_class, "
+                    "never booking, even if they also mention scheduling or registration.\n"
+                    "- telegram_bot: bots, automated messaging assistants\n"
+                    "- company_landing: business/company intro pages with no specific product\n"
+                    "- general: anything else"
+                ),
             },
             "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
 
