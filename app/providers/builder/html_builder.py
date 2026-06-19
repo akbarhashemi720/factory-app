@@ -210,7 +210,11 @@ def _render_html(spec: dict) -> str:
     name, tagline = spec["name"], spec["tagline"]
     ptype = spec["type"]
 
-    nav_html = "".join(f'<a href="#" class="nav-link">{n}</a>' for n in spec["nav_items"])
+    section_ids = ["home", "menu", "gallery", "about", "reserve", "contact"]
+    nav_html = ""
+    for i, n in enumerate(spec["nav_items"]):
+        target = section_ids[i] if i < len(section_ids) else "home"
+        nav_html += f'<a href="#{target}" class="nav-link">{n}</a>'
 
     menu_html = ""
     for m in spec["menu_items"]:
@@ -221,7 +225,7 @@ def _render_html(spec: dict) -> str:
           <div class="m-name">{m['name']}</div>
           <div class="m-desc">{m['desc']}</div>
           {price_html}
-          <button class="m-btn">انتخاب</button>
+          <button class="m-btn" onclick="mockSelect('{m['name']}')">انتخاب</button>
         </div>"""
 
     why_html = ""
@@ -281,6 +285,16 @@ def _render_html(spec: dict) -> str:
   .why-title {{ font-weight:700; margin-bottom:6px; }}
   .why-desc {{ color:#6b7280; font-size:0.85rem; }}
 
+  .gallery-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }}
+  .gallery-item {{ aspect-ratio:1; border-radius:14px; background:linear-gradient(135deg,{color}22,{color2}22); display:flex; align-items:center; justify-content:center; font-size:2rem; color:{color}; }}
+
+  .form-wrap {{ background:#fff; border-radius:16px; padding:32px; box-shadow:0 2px 14px rgba(0,0,0,0.06); max-width:480px; margin:0 auto; }}
+  .form-row {{ margin-bottom:14px; }}
+  .form-row label {{ display:block; font-size:0.82rem; margin-bottom:5px; color:#374151; font-weight:600; }}
+  .form-row input, .form-row select {{ width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:0.85rem; font-family:inherit; }}
+  .form-submit {{ width:100%; background:{color}; color:#fff; border:none; padding:13px; border-radius:10px; font-size:0.95rem; font-weight:700; cursor:pointer; margin-top:8px; }}
+  .confirm-box {{ display:none; background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:14px; border-radius:10px; text-align:center; font-size:0.85rem; margin-top:14px; }}
+
   .cta {{ background:linear-gradient(135deg,{color},{color2}); color:#fff; padding:54px 24px; text-align:center; }}
   .cta h2 {{ font-size:1.4rem; font-weight:800; margin-bottom:10px; }}
   .cta p {{ opacity:0.92; margin-bottom:24px; font-size:0.92rem; }}
@@ -296,23 +310,34 @@ def _render_html(spec: dict) -> str:
   <nav>{nav_html}</nav>
 </header>
 
-<div class="hero">
+<div class="hero" id="home">
   <div class="hero-badge">پیش‌نمایش اولیه • {ptype}</div>
   <h1>{name}</h1>
   <p>{tagline}</p>
   <div class="hero-btns">
-    <button class="btn-primary">{spec['hero_btn']}</button>
-    <button class="btn-secondary">{spec['hero_btn2']}</button>
+    <button class="btn-primary" onclick="scrollToId('menu')">{spec['hero_btn']}</button>
+    <button class="btn-secondary" onclick="scrollToId('reserve')">{spec['hero_btn2']}</button>
   </div>
 </div>
 
-<div class="section">
+<div class="section" id="menu">
   <div class="section-title">پیشنهادهای ویژه</div>
   <div class="section-sub">نمونه‌ای از آنچه مشتریان شما می‌بینند</div>
   <div class="menu-grid">{menu_html}</div>
 </div>
 
-<div class="section">
+<div class="section" id="gallery">
+  <div class="section-title">گالری تصاویر</div>
+  <div class="section-sub">نمونه‌ای از فضای کسب‌وکار شما</div>
+  <div class="gallery-grid">
+    <div class="gallery-item">📷</div>
+    <div class="gallery-item">📷</div>
+    <div class="gallery-item">📷</div>
+    <div class="gallery-item">📷</div>
+  </div>
+</div>
+
+<div class="section" id="about">
   <div class="about-wrap">
     <div class="about-icon">🏪</div>
     <div class="about-text">
@@ -329,16 +354,51 @@ def _render_html(spec: dict) -> str:
   <div class="why-grid">{why_html}</div>
 </div>
 
-<div class="cta">
+<div class="section" id="reserve">
+  <div class="section-title">رزرو یا سفارش</div>
+  <div class="section-sub">فرم زیر را پر کنید تا با شما تماس بگیریم</div>
+  <div class="form-wrap">
+    <div class="form-row">
+      <label>نام</label>
+      <input type="text" placeholder="نام شما">
+    </div>
+    <div class="form-row">
+      <label>شماره تماس</label>
+      <input type="text" placeholder="۰۹۱۲xxxxxxx">
+    </div>
+    <div class="form-row">
+      <label>تاریخ و زمان</label>
+      <input type="text" placeholder="مثلاً امشب ساعت ۸">
+    </div>
+    <button class="form-submit" onclick="mockSubmit()">ثبت درخواست</button>
+    <div class="confirm-box" id="confirmBox">✓ درخواست شما ثبت شد! به‌زودی با شما تماس می‌گیریم.</div>
+  </div>
+</div>
+
+<div class="cta" id="contact">
   <h2>همین حالا شروع کنید</h2>
   <p>برای رزرو، سفارش یا اطلاعات بیشتر با ما در ارتباط باشید</p>
-  <button class="btn-primary">تماس با ما</button>
+  <button class="btn-primary" onclick="scrollToId('reserve')">تماس با ما</button>
 </div>
 
 <footer>
   <div class="footer-logo">{name}</div>
   <div>این یک پیش‌نمایش اولیه است</div>
 </footer>
+
+<script>
+function scrollToId(id) {{
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({{behavior:'smooth'}});
+}}
+function mockSelect(itemName) {{
+  scrollToId('reserve');
+}}
+function mockSubmit() {{
+  const box = document.getElementById('confirmBox');
+  if (box) box.style.display = 'block';
+}}
+</script>
 
 </body>
 </html>"""
