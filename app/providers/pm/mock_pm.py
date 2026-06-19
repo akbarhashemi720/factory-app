@@ -340,7 +340,28 @@ def _entry_mode(text: str) -> str:
 
 # ─── Phase 1: generate ────────────────────────────────────────────────────────
 
+def _extract_business_domain(text: str) -> str | None:
+    """Best-effort domain extraction for builder spec selection (mock path only)."""
+    cooking_kw = ["آشپز", "غذا", "پخت", "کیک", "شیرینی"]
+    music_kw   = ["موسیقی", "ساز", "آواز", "گیتار", "پیانو"]
+    if any(k in text for k in cooking_kw):
+        return "آموزش آشپزی"
+    if any(k in text for k in music_kw):
+        return "آموزش موسیقی"
+    if "زبان" in text or "انگلیسی" in text:
+        return "آموزش زبان"
+    return None
+
+
 def generate(raw_text: str, language: str = "fa") -> dict[str, Any]:
+    """Public entry point — adds business_domain best-effort, then delegates."""
+    result = _generate_impl(raw_text, language)
+    if "business_domain" not in result or not result.get("business_domain"):
+        result["business_domain"] = _extract_business_domain(raw_text)
+    return result
+
+
+def _generate_impl(raw_text: str, language: str = "fa") -> dict[str, Any]:
     """
     Phase 1 — detect intent, return one warm diagnostic question.
     bullets are empty; populated only after Phase 2 (refine).
