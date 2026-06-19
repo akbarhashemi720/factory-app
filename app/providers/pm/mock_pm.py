@@ -145,11 +145,11 @@ _FAMILY_DIAGNOSTIC: dict[str, dict] = {
 # Tier 1: explicit product-type keywords (highest priority)
 _TIER1: list[tuple[str, list[str]]] = [
     ("telegram_bot",   ["ربات", "تلگرام", "bot", "بات"]),
+    ("restaurant",     ["کافه", "رستوران", "کافی‌شاپ", "کافیشاپ"]),
     ("booking",        ["رزرو", "نوبت گرفتن", "وقت گرفتن", "ثبت‌نام کلاس",
                         "رزرو بگیرم", "رزرو بگیرند", "appointment"]),
     ("dashboard",      ["داشبورد"]),
     ("store",          ["فروشگاه آنلاین", "فروشگاه", "shop", "store"]),
-    ("restaurant",     ["کافه", "رستوران", "کافی‌شاپ", "کافیشاپ"]),
     ("news_site",      ["سایت خبری", "وب‌سایت خبری", "پورتال خبری",
                         "news site", "news website",
                         "اخبار", "خبر"]),
