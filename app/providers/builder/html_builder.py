@@ -51,17 +51,21 @@ def generate(
 # ── Spec builder ───────────────────────────────────────────────────────────────
 
 def _build_spec(scenario: str, und: dict) -> dict:
+    domain = und.get("business_domain") or ""
+    # Fallback: some keyword signal may live in bullets when business_domain is absent (mock path)
+    signal_text = domain + " " + " ".join(und.get("bullets", []) or [])
+
     SPECS = {
         "restaurant": _restaurant_spec(),
-        "general_class": _education_spec(),
+        "general_class": _education_spec(signal_text),
         "booking": _booking_spec(),
         "telegram_bot": _booking_spec(bot=True),
         "store": _store_spec(),
     }
     spec = SPECS.get(scenario, _general_spec())
 
-    if und.get("business_domain") and len(und["business_domain"]) <= 24:
-        spec["name"] = und["business_domain"]
+    if domain and len(domain) <= 24:
+        spec["name"] = domain
 
     return spec
 
@@ -94,9 +98,68 @@ def _restaurant_spec():
     }
 
 
-def _education_spec():
+def _education_spec(domain: str = ""):
+    domain = domain or ""
+    is_cooking = any(k in domain for k in ["آشپز", "غذا", "پخت", "کیک", "شیرینی"])
+    is_music = any(k in domain for k in ["موسیقی", "ساز", "آواز", "گیتار", "پیانو"])
+    is_art = any(k in domain for k in ["نقاشی", "هنر", "طراحی"])
+
+    if is_cooking:
+        return {
+            "name": domain if domain else "آموزشگاه آشپزی ایرانی",
+            "tagline": "طعم اصیل ایرانی، آموزش حرفه‌ای، در کلاس یا آنلاین",
+            "type": "سایت آموزش آشپزی",
+            "color": "#B45309",
+            "color2": "#FBBF24",
+            "hero_btn": "مشاهده دوره‌ها",
+            "hero_btn2": "ثبت‌نام در کلاس",
+            "nav_items": ["خانه", "دوره‌ها", "مدرس", "کلاس‌ها", "تماس"],
+            "features": ["کلاس‌های آنلاین و حضوری", "دوره‌های غذاهای سنتی ایرانی", "ثبت‌نام آسان", "برنامه هفتگی کلاس‌ها"],
+            "menu_items": [
+                {"icon":"🍚","name":"دوره خوراک‌های سنتی","desc":"قورمه‌سبزی، فسنجان، آبگوشت","price":"حضوری/آنلاین"},
+                {"icon":"🥘","name":"دوره خورشت‌های ایرانی","desc":"تکنیک‌های اصیل پخت","price":"حضوری/آنلاین"},
+                {"icon":"🍞","name":"نان و خمیر سنتی","desc":"نان سنگک، بربری، لواش","price":"حضوری"},
+                {"icon":"🍰","name":"شیرینی‌پزی ایرانی","desc":"باقلوا، نان نخودچی","price":"آنلاین"},
+                {"icon":"🍢","name":"کباب و گریل","desc":"کباب کوبیده، جوجه، بختیاری","price":"حضوری"},
+                {"icon":"🎓","name":"دوره جامع آشپزی","desc":"از مقدماتی تا حرفه‌ای","price":"ترمی"},
+            ],
+            "why_us": [
+                {"icon":"👨‍🍳","title":"مدرس مجرب","desc":"سال‌ها تجربه آشپزی سنتی"},
+                {"icon":"💻","title":"کلاس آنلاین و حضوری","desc":"یادگیری به سبک دلخواه شما"},
+                {"icon":"📜","title":"مدرک پایان دوره","desc":"گواهی معتبر شرکت در دوره"},
+            ],
+            "about": "در این آموزشگاه، رازهای آشپزی ایرانی را قدم‌به‌قدم و با تمرین عملی یاد می‌گیرید — هم در کلاس حضوری، هم آنلاین.",
+        }
+
+    if is_music:
+        return {
+            "name": domain if domain else "آموزشگاه موسیقی",
+            "tagline": "نواختن را از همین امروز شروع کن",
+            "type": "سایت آموزش موسیقی",
+            "color": "#5B21B6",
+            "color2": "#A78BFA",
+            "hero_btn": "مشاهده دوره‌ها",
+            "hero_btn2": "ثبت‌نام در کلاس",
+            "nav_items": ["خانه", "دوره‌ها", "مدرسین", "کلاس‌ها", "تماس"],
+            "features": ["کلاس‌های آنلاین و حضوری", "آموزش انفرادی و گروهی", "ثبت‌نام آسان", "برنامه کلاس‌ها"],
+            "menu_items": [
+                {"icon":"🎸","name":"گیتار مقدماتی","desc":"برای تازه‌کارها","price":"ماهانه"},
+                {"icon":"🎹","name":"پیانو پایه","desc":"تئوری و تکنیک","price":"ماهانه"},
+                {"icon":"🎤","name":"آواز و صداسازی","desc":"تکنیک‌های صحیح خوانندگی","price":"جلسه‌ای"},
+                {"icon":"🥁","name":"درام","desc":"ریتم و تمرین عملی","price":"ماهانه"},
+                {"icon":"🎻","name":"ویولن","desc":"کلاسیک و محلی","price":"ماهانه"},
+                {"icon":"🎓","name":"دوره تئوری موسیقی","desc":"برای همه سازها","price":"ترمی"},
+            ],
+            "why_us": [
+                {"icon":"🎼","title":"مدرسین حرفه‌ای","desc":"تجربه آموزش چندساله"},
+                {"icon":"💻","title":"کلاس آنلاین و حضوری","desc":"یادگیری به سبک دلخواه شما"},
+                {"icon":"🎵","title":"تمرین عملی","desc":"یادگیری با تمرین واقعی"},
+            ],
+            "about": "در این آموزشگاه، نواختن ساز را با مدرسین حرفه‌ای و به‌صورت آنلاین یا حضوری یاد می‌گیرید.",
+        }
+
     return {
-        "name": "آموزشگاه زبان نوین",
+        "name": domain if domain else "آموزشگاه زبان نوین",
         "tagline": "یادگیری شیرین‌تر، آینده روشن‌تر",
         "type": "سایت آموزشی",
         "color": "#4338CA",
@@ -221,11 +284,13 @@ def _render_html(spec: dict) -> str:
         price_html = f'<div class="m-price">{m["price"]}</div>' if m["price"] else ""
         menu_html += f"""
         <div class="m-card">
-          <div class="m-icon">{m['icon']}</div>
-          <div class="m-name">{m['name']}</div>
-          <div class="m-desc">{m['desc']}</div>
-          {price_html}
-          <button class="m-btn" onclick="mockSelect('{m['name']}')">انتخاب</button>
+          <div class="m-img">{m['icon']}</div>
+          <div class="m-card-body">
+            <div class="m-name">{m['name']}</div>
+            <div class="m-desc">{m['desc']}</div>
+            {price_html}
+            <button class="m-btn" onclick="mockSelect('{m['name']}')">انتخاب</button>
+          </div>
         </div>"""
 
     why_html = ""
@@ -239,6 +304,11 @@ def _render_html(spec: dict) -> str:
 
     features_html = "".join(f'<li>✓ {f}</li>' for f in spec.get("features", []))
 
+    gallery_icons = [m["icon"] for m in spec["menu_items"][:4]] or ["📷", "🏠", "✨", "👥"]
+    while len(gallery_icons) < 4:
+        gallery_icons.append("📷")
+    gallery_html = "".join(f'<div class="gallery-item">{ic}</div>' for ic in gallery_icons[:4])
+
     return f"""<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -247,60 +317,65 @@ def _render_html(spec: dict) -> str:
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html {{ scroll-behavior:smooth; }}
-  body {{ font-family:Tahoma,Arial,sans-serif; background:#fafafa; color:#1f2937; direction:rtl; line-height:1.6; }}
+  body {{ font-family:Tahoma,Arial,sans-serif; background:#FBF7F0; color:#2D2424; direction:rtl; line-height:1.7; }}
 
-  header {{ position:sticky; top:0; background:#fff; box-shadow:0 1px 8px rgba(0,0,0,0.06); z-index:10; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }}
-  .logo {{ font-weight:800; font-size:1.1rem; color:{color}; }}
-  .nav-link {{ color:#444; text-decoration:none; font-size:0.85rem; margin:0 8px; }}
+  header {{ position:sticky; top:0; background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); box-shadow:0 1px 12px rgba(0,0,0,0.07); z-index:10; padding:16px 32px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }}
+  .logo {{ font-weight:800; font-size:1.25rem; color:{color}; letter-spacing:.3px; }}
+  .nav-link {{ color:#555; text-decoration:none; font-size:0.88rem; margin:0 10px; font-weight:500; transition:color .2s; }}
 
-  .hero {{ background:linear-gradient(135deg,{color},{color2}); color:#fff; padding:64px 24px; text-align:center; }}
-  .hero-badge {{ display:inline-block; background:rgba(255,255,255,0.25); padding:5px 14px; border-radius:14px; font-size:0.75rem; margin-bottom:16px; }}
-  .hero h1 {{ font-size:2rem; font-weight:800; margin-bottom:10px; }}
-  .hero p {{ font-size:1.05rem; opacity:0.95; margin-bottom:26px; }}
-  .hero-btns {{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }}
-  .btn-primary {{ background:#fff; color:{color}; border:none; padding:13px 30px; border-radius:25px; font-size:0.95rem; font-weight:700; cursor:pointer; }}
-  .btn-secondary {{ background:transparent; color:#fff; border:2px solid rgba(255,255,255,0.7); padding:11px 28px; border-radius:25px; font-size:0.95rem; font-weight:700; cursor:pointer; }}
+  .hero {{ position:relative; background:linear-gradient(160deg,{color} 0%,{color2} 55%,{color} 100%); color:#fff; padding:90px 24px 110px; text-align:center; overflow:hidden; }}
+  .hero::before {{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), radial-gradient(circle at 85% 75%, rgba(255,255,255,0.12) 0%, transparent 40%); }}
+  .hero-inner {{ position:relative; z-index:2; max-width:680px; margin:0 auto; }}
+  .hero-badge {{ display:inline-block; background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.35); padding:6px 18px; border-radius:20px; font-size:0.78rem; margin-bottom:22px; letter-spacing:.2px; }}
+  .hero h1 {{ font-size:2.5rem; font-weight:800; margin-bottom:14px; text-shadow:0 2px 12px rgba(0,0,0,0.15); }}
+  .hero p {{ font-size:1.15rem; opacity:0.96; margin-bottom:34px; }}
+  .hero-btns {{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }}
+  .btn-primary {{ background:#fff; color:{color}; border:none; padding:15px 36px; border-radius:28px; font-size:0.98rem; font-weight:700; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.18); transition:transform .15s; }}
+  .btn-secondary {{ background:rgba(255,255,255,0.12); color:#fff; border:2px solid rgba(255,255,255,0.65); padding:13px 32px; border-radius:28px; font-size:0.98rem; font-weight:700; cursor:pointer; }}
+  .hero-wave {{ position:absolute; bottom:-2px; left:0; right:0; height:50px; background:#FBF7F0; border-radius:50% 50% 0 0 / 100% 100% 0 0; }}
 
-  .section {{ padding:56px 24px; max-width:1080px; margin:0 auto; }}
-  .section-title {{ font-size:1.5rem; font-weight:800; text-align:center; margin-bottom:8px; color:#111827; }}
-  .section-sub {{ text-align:center; color:#6b7280; font-size:0.9rem; margin-bottom:36px; }}
+  .section {{ padding:64px 28px; max-width:1100px; margin:0 auto; }}
+  .section-title {{ font-size:1.65rem; font-weight:800; text-align:center; margin-bottom:10px; color:#2D2424; }}
+  .section-sub {{ text-align:center; color:#8a7a6e; font-size:0.92rem; margin-bottom:40px; }}
 
-  .menu-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:20px; }}
-  .m-card {{ background:#fff; border-radius:14px; padding:22px; box-shadow:0 2px 14px rgba(0,0,0,0.06); text-align:center; transition:transform .2s; }}
-  .m-icon {{ font-size:2.2rem; margin-bottom:10px; }}
-  .m-name {{ font-weight:700; font-size:1rem; margin-bottom:6px; }}
-  .m-desc {{ color:#6b7280; font-size:0.82rem; margin-bottom:10px; min-height:32px; }}
-  .m-price {{ color:{color}; font-weight:700; font-size:0.95rem; margin-bottom:12px; }}
-  .m-btn {{ background:{color}; color:#fff; border:none; padding:8px 22px; border-radius:18px; font-size:0.82rem; cursor:pointer; }}
+  .menu-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:22px; }}
+  .m-card {{ background:#fff; border-radius:18px; padding:0; box-shadow:0 4px 20px rgba(45,36,36,0.08); text-align:center; overflow:hidden; transition:transform .2s,box-shadow .2s; }}
+  .m-img {{ height:90px; background:linear-gradient(135deg,{color}1a,{color2}33); display:flex; align-items:center; justify-content:center; font-size:2.6rem; }}
+  .m-card-body {{ padding:20px; }}
+  .m-name {{ font-weight:700; font-size:1.02rem; margin-bottom:6px; color:#2D2424; }}
+  .m-desc {{ color:#8a7a6e; font-size:0.82rem; margin-bottom:12px; min-height:32px; }}
+  .m-price {{ color:{color}; font-weight:800; font-size:1rem; margin-bottom:14px; }}
+  .m-btn {{ background:{color}; color:#fff; border:none; padding:9px 26px; border-radius:20px; font-size:0.83rem; cursor:pointer; font-weight:600; }}
 
-  .about-wrap {{ background:#fff; border-radius:18px; padding:36px; box-shadow:0 2px 14px rgba(0,0,0,0.05); display:flex; gap:28px; align-items:center; flex-wrap:wrap; }}
-  .about-icon {{ font-size:3.5rem; flex-shrink:0; }}
-  .about-text {{ flex:1; min-width:240px; color:#374151; font-size:0.92rem; }}
-  .feature-list {{ list-style:none; margin-top:16px; }}
-  .feature-list li {{ padding:6px 0; color:#374151; font-size:0.88rem; }}
+  .about-wrap {{ background:#fff; border-radius:22px; padding:42px; box-shadow:0 4px 20px rgba(45,36,36,0.06); display:flex; gap:32px; align-items:center; flex-wrap:wrap; }}
+  .about-icon {{ font-size:4rem; flex-shrink:0; width:90px; height:90px; background:linear-gradient(135deg,{color}1a,{color2}33); border-radius:50%; display:flex; align-items:center; justify-content:center; }}
+  .about-text {{ flex:1; min-width:240px; color:#4a3f3a; font-size:0.94rem; }}
+  .feature-list {{ list-style:none; margin-top:18px; }}
+  .feature-list li {{ padding:7px 0; color:#4a3f3a; font-size:0.88rem; }}
 
-  .why-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:20px; }}
-  .why-card {{ text-align:center; padding:20px; }}
-  .why-icon {{ font-size:2.4rem; margin-bottom:10px; }}
-  .why-title {{ font-weight:700; margin-bottom:6px; }}
-  .why-desc {{ color:#6b7280; font-size:0.85rem; }}
+  .why-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:24px; }}
+  .why-card {{ text-align:center; padding:28px 20px; background:#fff; border-radius:18px; box-shadow:0 3px 16px rgba(45,36,36,0.05); }}
+  .why-icon {{ font-size:2.6rem; margin-bottom:14px; }}
+  .why-title {{ font-weight:700; margin-bottom:8px; font-size:1.02rem; color:#2D2424; }}
+  .why-desc {{ color:#8a7a6e; font-size:0.86rem; }}
 
-  .gallery-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }}
-  .gallery-item {{ aspect-ratio:1; border-radius:14px; background:linear-gradient(135deg,{color}22,{color2}22); display:flex; align-items:center; justify-content:center; font-size:2rem; color:{color}; }}
+  .gallery-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:18px; }}
+  .gallery-item {{ aspect-ratio:4/3; border-radius:18px; background:linear-gradient(135deg,{color}26,{color2}40); display:flex; align-items:center; justify-content:center; font-size:2.4rem; box-shadow:0 4px 16px rgba(45,36,36,0.08); position:relative; overflow:hidden; }}
+  .gallery-item::after {{ content:""; position:absolute; inset:0; background:linear-gradient(180deg,transparent 60%,rgba(0,0,0,0.08) 100%); }}
 
-  .form-wrap {{ background:#fff; border-radius:16px; padding:32px; box-shadow:0 2px 14px rgba(0,0,0,0.06); max-width:480px; margin:0 auto; }}
-  .form-row {{ margin-bottom:14px; }}
-  .form-row label {{ display:block; font-size:0.82rem; margin-bottom:5px; color:#374151; font-weight:600; }}
-  .form-row input, .form-row select {{ width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:0.85rem; font-family:inherit; }}
-  .form-submit {{ width:100%; background:{color}; color:#fff; border:none; padding:13px; border-radius:10px; font-size:0.95rem; font-weight:700; cursor:pointer; margin-top:8px; }}
-  .confirm-box {{ display:none; background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:14px; border-radius:10px; text-align:center; font-size:0.85rem; margin-top:14px; }}
+  .form-wrap {{ background:#fff; border-radius:20px; padding:38px; box-shadow:0 4px 22px rgba(45,36,36,0.08); max-width:500px; margin:0 auto; }}
+  .form-row {{ margin-bottom:16px; }}
+  .form-row label {{ display:block; font-size:0.84rem; margin-bottom:6px; color:#4a3f3a; font-weight:600; }}
+  .form-row input, .form-row select {{ width:100%; padding:11px 14px; border:1.5px solid #ECE2D6; border-radius:10px; font-size:0.87rem; font-family:inherit; background:#FBF7F0; }}
+  .form-submit {{ width:100%; background:{color}; color:#fff; border:none; padding:14px; border-radius:12px; font-size:0.97rem; font-weight:700; cursor:pointer; margin-top:10px; box-shadow:0 4px 14px {color}40; }}
+  .confirm-box {{ display:none; background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:16px; border-radius:12px; text-align:center; font-size:0.86rem; margin-top:16px; }}
 
-  .cta {{ background:linear-gradient(135deg,{color},{color2}); color:#fff; padding:54px 24px; text-align:center; }}
-  .cta h2 {{ font-size:1.4rem; font-weight:800; margin-bottom:10px; }}
-  .cta p {{ opacity:0.92; margin-bottom:24px; font-size:0.92rem; }}
+  .cta {{ background:linear-gradient(160deg,{color},{color2}); color:#fff; padding:64px 24px; text-align:center; }}
+  .cta h2 {{ font-size:1.6rem; font-weight:800; margin-bottom:12px; }}
+  .cta p {{ opacity:0.94; margin-bottom:28px; font-size:0.95rem; }}
 
-  footer {{ background:#111827; color:#9ca3af; padding:28px 24px; text-align:center; font-size:0.8rem; }}
-  footer .footer-logo {{ color:#fff; font-weight:700; margin-bottom:8px; font-size:1rem; }}
+  footer {{ background:#241C1C; color:#a89b94; padding:32px 24px; text-align:center; font-size:0.82rem; }}
+  footer .footer-logo {{ color:#fff; font-weight:700; margin-bottom:10px; font-size:1.05rem; }}
 </style>
 </head>
 <body>
@@ -311,13 +386,16 @@ def _render_html(spec: dict) -> str:
 </header>
 
 <div class="hero" id="home">
-  <div class="hero-badge">پیش‌نمایش اولیه • {ptype}</div>
-  <h1>{name}</h1>
-  <p>{tagline}</p>
-  <div class="hero-btns">
-    <button class="btn-primary" onclick="scrollToId('menu')">{spec['hero_btn']}</button>
-    <button class="btn-secondary" onclick="scrollToId('reserve')">{spec['hero_btn2']}</button>
+  <div class="hero-inner">
+    <div class="hero-badge">پیش‌نمایش اولیه • {ptype}</div>
+    <h1>{name}</h1>
+    <p>{tagline}</p>
+    <div class="hero-btns">
+      <button class="btn-primary" onclick="scrollToId('menu')">{spec['hero_btn']}</button>
+      <button class="btn-secondary" onclick="scrollToId('reserve')">{spec['hero_btn2']}</button>
+    </div>
   </div>
+  <div class="hero-wave"></div>
 </div>
 
 <div class="section" id="menu">
@@ -329,12 +407,7 @@ def _render_html(spec: dict) -> str:
 <div class="section" id="gallery">
   <div class="section-title">گالری تصاویر</div>
   <div class="section-sub">نمونه‌ای از فضای کسب‌وکار شما</div>
-  <div class="gallery-grid">
-    <div class="gallery-item">📷</div>
-    <div class="gallery-item">📷</div>
-    <div class="gallery-item">📷</div>
-    <div class="gallery-item">📷</div>
-  </div>
+  <div class="gallery-grid">{gallery_html}</div>
 </div>
 
 <div class="section" id="about">
