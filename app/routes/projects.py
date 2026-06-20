@@ -21,6 +21,8 @@ from app.models import (
     ProjectStateResponse,
     ProjectSummary,
     RevisionRequestBody,
+    DirectEditRequest,
+    DirectEditResponse,
     SaveHtmlRequest,
     SaveHtmlResponse,
     SubmitRequestBody,
@@ -1002,6 +1004,118 @@ def save_html(project_id: UUID, body: SaveHtmlRequest,
         version_id=body.version_id,
         preview_data=preview,
         message="تغییرات ذخیره شد.",
+    )
+
+
+# ─── POST /projects/{project_id}/edit-direct ─────────────────────────────────
+
+@router.post("/{project_id}/edit-direct", response_model=DirectEditResponse)
+def edit_direct(project_id: UUID, body: DirectEditRequest,
+                 x_customer_id: Optional[str] = Header(default=None)):
+    """
+    Apply a DIRECT, deterministic edit from the Contextual Edit Panel's
+    mini-dashboard — text, color, size, icon, price, or section move.
+
+    This is the fix for "direct fields don't apply unless the user also
+    writes a natural-language instruction": the panel calls this endpoint
+    immediately when the user clicks "اعمال این تغییر", with no AI
+    interpretation step and no dependency on the lower text box. The free
+    text box remains a separate, optional fallback (still going through
+    /revision) for anything the mini-dashboard doesn't cover.
+    """
+    db = get_db()
+    project = _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    ver_result = db.table("versions").select("*").eq("id", str(body.version_id)).execute()
+    if not ver_result.data:
+        raise HTTPException(status_code=404, detail="Version not found")
+    version = ver_result.data[0]
+    if version["project_id"] != str(project_id):
+        raise HTTPException(status_code=400, detail="Version does not belong to this project")
+
+    preview = version.get("user_visible_preview") or {}
+    sections = preview.get("section_blocks")
+    global_style = preview.get("global_style") or {
+        "primary_color": "#4F46E5", "secondary_color": "#818CF8",
+        "border_radius": "14px", "font_family": "Tahoma,Arial,sans-serif",
+    }
+    if not sections:
+        raise HTTPException(
+            status_code=400,
+            detail="این نسخه قابلیت ویرایش مستقیم را ندارد. لطفاً دوباره پیش‌نمایش بساز.",
+        )
+
+    from app.providers.builder.section_model import (
+        apply_section_edit, apply_item_field_edit, apply_element_style_edit,
+        reorder_section,
+    )
+    from app.providers.builder.render_sections import render_website
+
+    sid = body.selected_section_id
+    section_exists = any(s["id"] == sid for s in sections)
+    if not section_exists:
+        raise HTTPException(status_code=400, detail="بخش انتخاب‌شده پیدا نشد.")
+
+    applied_anything = False
+
+    # 1. Text content change — either on a list item (card title/desc/price)
+    #    or directly on the section's own content field.
+    if body.new_text is not None and body.field_key:
+        if body.item_index is not None:
+            sections = apply_item_field_edit(sections, sid, body.item_index, body.field_key, body.new_text)
+        else:
+            sections = apply_section_edit(sections, sid, body.field_key, body.new_text)
+        applied_anything = True
+
+    # 2. Per-element style overrides (color / size / icon) — deterministic,
+    #    rendered directly by render_sections.py without any AI step.
+    if body.selected_element_id and (body.color or body.size or body.icon or body.background_color):
+        if body.color:
+            sections = apply_element_style_edit(sections, sid, body.selected_element_id, "color", body.color)
+            applied_anything = True
+        if body.background_color:
+            sections = apply_element_style_edit(sections, sid, body.selected_element_id, "background_color", body.background_color)
+            applied_anything = True
+        if body.size:
+            sections = apply_element_style_edit(sections, sid, body.selected_element_id, "size", body.size)
+            applied_anything = True
+        if body.icon and body.item_index is not None:
+            sections = apply_item_field_edit(sections, sid, body.item_index, "icon", body.icon)
+            applied_anything = True
+
+    # 3. Whole-section background color (clicked the section itself, no
+    #    specific element — e.g. the hero gradient background).
+    if body.background_color and not body.selected_element_id:
+        for sec in sections:
+            if sec["id"] == sid:
+                sec.setdefault("style", {})
+                sec["style"]["background_color"] = body.background_color
+                break
+        applied_anything = True
+
+    # 4. Move the whole selected section up/down.
+    if body.move_section in ("up", "down"):
+        sections = reorder_section(sections, sid, body.move_section)
+        applied_anything = True
+
+    if not applied_anything:
+        raise HTTPException(status_code=400, detail="چیزی برای اعمال مشخص نشده است.")
+
+    new_html = render_website(sections, global_style)
+    preview["section_blocks"] = sections
+    preview["global_style"] = global_style
+    preview["html_preview"] = new_html
+    preview["_is_html_preview"] = True
+
+    db.table("versions").update(
+        {"user_visible_preview": preview}
+    ).eq("id", str(body.version_id)).execute()
+
+    return DirectEditResponse(
+        project_id=project_id,
+        version_id=body.version_id,
+        preview_data=preview,
+        message="تغییر انجام شد.",
     )
 
 
