@@ -322,6 +322,38 @@ class SaveHtmlResponse(BaseModel):
     message: str
 
 
+class DirectEditRequest(BaseModel):
+    """
+    Apply one or more DIRECT, deterministic edits from the Contextual Edit
+    Panel's mini-dashboard (text/color/size fields, card fields, price,
+    section background color, section move). No AI involved — this is the
+    fix for "direct fields don't apply unless the user also writes a
+    natural-language instruction": the panel now calls this endpoint
+    straight away, with no dependency on text interpretation.
+    """
+    version_id: UUID
+    selected_section_id: str = Field(..., min_length=1)
+    selected_element_id: str | None = None
+    # One or more of the following may be set, depending on what the user
+    # changed in the mini-dashboard. All optional — only present fields
+    # are applied.
+    new_text: str | None = None          # updates the element's main text field
+    item_index: int | None = None        # required when editing a list item (card title/desc/price)
+    field_key: str | None = None         # which content field to update — "title", "name", "desc", "price", "primary_button", ...
+    color: str | None = None             # hex color for the element's text/icon
+    background_color: str | None = None  # hex color for section background or card/button background
+    size: str | None = None              # "small" | "medium" | "large"
+    icon: str | None = None              # emoji/icon replacement
+    move_section: str | None = None      # "up" | "down" — move the whole selected section
+
+
+class DirectEditResponse(BaseModel):
+    project_id: UUID
+    version_id: UUID
+    preview_data: dict[str, Any]
+    message: str
+
+
 class GenerateRevisionResponse(BaseModel):
     project_id: UUID
     revision_request_id: UUID
