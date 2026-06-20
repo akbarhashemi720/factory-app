@@ -70,6 +70,55 @@ class UnderstandingRow(BaseModel):
     created_at: datetime = None
     updated_at: datetime = None
 
+    # ── Rich structured fields (from Claude understanding) ─────────────────────
+    # Stored so they survive the round-trip to storage and back into the builder.
+    # All optional — mock_pm / older data simply won't populate them.
+    website_intent: str | None = None
+    product_type: str | None = None
+    business_domain: str | None = None
+    product_name: str | None = None
+    target_users: str | None = None
+    primary_goal: str | None = None
+    visual_style: str | None = None
+    color_palette: dict[str, Any] = {}
+    hero_title: str | None = None
+    hero_subtitle: str | None = None
+    primary_cta: str | None = None
+    secondary_cta: str | None = None
+    navigation_items: list[str] = []
+    required_sections: list[str] = []
+    menu_items: list[dict[str, Any]] = []
+    benefits: list[dict[str, Any]] = []
+    about_text: str | None = None
+    user_actions: list[str] = []
+    owner_actions: list[str] = []
+    suggested_features: list[str] = []
+    first_version_scope: str | None = None
+
+    # ── Rich structured fields (Builder v2 / Website Builder) ──────────────────
+    # Persisted so Claude's structured understanding survives into generate-preview.
+    product_type: str | None = None
+    business_domain: str | None = None
+    website_intent: str | None = None
+    primary_goal: str | None = None
+    target_users: str | None = None
+    product_name: str | None = None
+    visual_style: str | None = None
+    color_palette: dict[str, Any] = {}
+    hero_title: str | None = None
+    hero_subtitle: str | None = None
+    primary_cta: str | None = None
+    secondary_cta: str | None = None
+    navigation_items: list[str] = []
+    required_sections: list[str] = []
+    user_actions: list[str] = []
+    owner_actions: list[str] = []
+    suggested_features: list[str] = []
+    menu_items: list[dict[str, Any]] = []
+    benefits: list[dict[str, Any]] = []
+    about_text: str | None = None
+    first_version_scope: str | None = None
+
 
 class BuilderOutputRow(BaseModel):
     id: UUID
