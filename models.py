@@ -42,8 +42,8 @@ class ProjectRow(BaseModel):
     language: str
     current_version_id: UUID | None = None
     final_approval_status: bool = False
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = None
+    updated_at: datetime = None
 
 
 class UserRequestRow(BaseModel):
@@ -53,7 +53,7 @@ class UserRequestRow(BaseModel):
     input_type: str
     detected_language: str
     attachments: list[Any]
-    created_at: datetime
+    created_at: datetime = None
 
 
 class UnderstandingRow(BaseModel):
@@ -63,12 +63,61 @@ class UnderstandingRow(BaseModel):
     assumptions: list[str] = []
     clarification_questions: list[str] = []
     user_answers: list[str] = []
-    detected_scenario: str | None
-    confidence: str | None
-    confirmed_by_user: bool
-    confirmed_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
+    detected_scenario: str | None = None
+    confidence: str | None = None
+    confirmed_by_user: bool = False
+    confirmed_at: datetime | None = None
+    created_at: datetime = None
+    updated_at: datetime = None
+
+    # ── Rich structured fields (from Claude understanding) ─────────────────────
+    # Stored so they survive the round-trip to storage and back into the builder.
+    # All optional — mock_pm / older data simply won't populate them.
+    website_intent: str | None = None
+    product_type: str | None = None
+    business_domain: str | None = None
+    product_name: str | None = None
+    target_users: str | None = None
+    primary_goal: str | None = None
+    visual_style: str | None = None
+    color_palette: dict[str, Any] = {}
+    hero_title: str | None = None
+    hero_subtitle: str | None = None
+    primary_cta: str | None = None
+    secondary_cta: str | None = None
+    navigation_items: list[str] = []
+    required_sections: list[str] = []
+    menu_items: list[dict[str, Any]] = []
+    benefits: list[dict[str, Any]] = []
+    about_text: str | None = None
+    user_actions: list[str] = []
+    owner_actions: list[str] = []
+    suggested_features: list[str] = []
+    first_version_scope: str | None = None
+
+    # ── Rich structured fields (Builder v2 / Website Builder) ──────────────────
+    # Persisted so Claude's structured understanding survives into generate-preview.
+    product_type: str | None = None
+    business_domain: str | None = None
+    website_intent: str | None = None
+    primary_goal: str | None = None
+    target_users: str | None = None
+    product_name: str | None = None
+    visual_style: str | None = None
+    color_palette: dict[str, Any] = {}
+    hero_title: str | None = None
+    hero_subtitle: str | None = None
+    primary_cta: str | None = None
+    secondary_cta: str | None = None
+    navigation_items: list[str] = []
+    required_sections: list[str] = []
+    user_actions: list[str] = []
+    owner_actions: list[str] = []
+    suggested_features: list[str] = []
+    menu_items: list[dict[str, Any]] = []
+    benefits: list[dict[str, Any]] = []
+    about_text: str | None = None
+    first_version_scope: str | None = None
 
 
 class BuilderOutputRow(BaseModel):
@@ -79,7 +128,7 @@ class BuilderOutputRow(BaseModel):
     preview_data: dict[str, Any]
     change_summary: list[str]
     known_limitations: list[str]
-    created_at: datetime
+    created_at: datetime = None
 
 
 class VersionRow(BaseModel):
@@ -91,7 +140,7 @@ class VersionRow(BaseModel):
     review_report_id: UUID | None
     user_visible_preview: dict[str, Any]
     approved_by_user: bool
-    created_at: datetime
+    created_at: datetime = None
 
 
 class ReviewReportRow(BaseModel):
@@ -103,7 +152,7 @@ class ReviewReportRow(BaseModel):
     checklist: list[dict[str, Any]]
     user_friendly_summary: str | None
     internal_notes: str | None
-    created_at: datetime
+    created_at: datetime = None
 
 
 class ApprovedVersionRow(BaseModel):
@@ -124,7 +173,7 @@ class LearningNoteRow(BaseModel):
     what_worked: list[str]
     user_preferences_detected: dict[str, Any]
     reusable_patterns: list[str]
-    created_at: datetime
+    created_at: datetime = None
 
 
 class RevisionRequestRow(BaseModel):
@@ -134,8 +183,8 @@ class RevisionRequestRow(BaseModel):
     raw_revision_text: str
     interpreted_actions: list[dict[str, Any]]
     status: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = None
+    updated_at: datetime = None
 
 
 class ReusablePatternRow(BaseModel):
@@ -148,8 +197,8 @@ class ReusablePatternRow(BaseModel):
     pattern_data: dict[str, Any]
     usage_count: int
     approval_count: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = None
+    updated_at: datetime = None
 
 
 # ─── Response bodies ──────────────────────────────────────────────────────────
@@ -200,9 +249,9 @@ class GenerateUnderstandingResponse(BaseModel):
     bullets: list[str]
     assumptions: list[str]
     clarification_questions: list[str]
-    detected_scenario: str | None
-    confidence: str | None
-    confirmed_by_user: bool
+    detected_scenario: str | None = None
+    confidence: str | None = None
+    confirmed_by_user: bool = False
     status: str
     # Diagnostic question fields (Phase 1)
     has_diagnostic_question: bool = False
@@ -214,7 +263,7 @@ class GenerateUnderstandingResponse(BaseModel):
 class ConfirmUnderstandingResponse(BaseModel):
     project_id: UUID
     understanding_id: UUID
-    confirmed_by_user: bool
+    confirmed_by_user: bool = False
     status: str
 
 
@@ -266,7 +315,7 @@ class ExportRow(BaseModel):
     export_type: str
     export_data: dict[str, Any]
     summary: str | None
-    created_at: datetime
+    created_at: datetime = None
 
 
 class ExportResponse(BaseModel):
