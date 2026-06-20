@@ -43,7 +43,10 @@ def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any])
         renderer = _RENDERERS.get(sec["type"])
         if renderer is None:
             continue
-        section_html = renderer(sec["id"], sec["content"], color, color2)
+        sec_style = sec.get("style") or {}
+        overrides = sec_style.get("element_overrides") or {}
+        section_bg = sec_style.get("background_color")
+        section_html = renderer(sec["id"], sec["content"], color, color2, overrides, section_bg)
         body_html += (
             f'<div class="ed-section" data-section-id="{sec["id"]}" '
             f'data-section-type="{sec["type"]}">'
@@ -68,54 +71,103 @@ def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any])
 </html>"""
 
 
+def _bg_style_attr(section_bg: str | None) -> str:
+    """Inline style override for a section's own root visual element
+    (e.g. .hero, .section, .cta, header) — not the invisible click-wrapper."""
+    if section_bg:
+        return f' style="background:{_esc(section_bg)} !important"'
+    return ""
+
+
+_SIZE_PRESETS = {
+    "small": {"title": "1.8rem", "subtitle": "0.95rem", "button": "0.85rem", "text": "0.85rem"},
+    "medium": {"title": "2.5rem", "subtitle": "1.15rem", "button": "0.98rem", "text": "1rem"},
+    "large": {"title": "3.2rem", "subtitle": "1.4rem", "button": "1.1rem", "text": "1.2rem"},
+}
+
+
+def _element_style_attr(overrides: dict[str, Any], element_id: str, element_type: str) -> str:
+    """
+    Build an inline style="" attribute from this element's direct overrides
+    (color, size) — deterministic, no AI involved. Used by the Contextual
+    Edit Panel's direct color/size controls.
+    """
+    ov = overrides.get(element_id)
+    if not ov:
+        return ""
+    styles = []
+    color = ov.get("color")
+    if color:
+        styles.append(f"color:{_esc(color)} !important")
+    bg_color = ov.get("background_color")
+    if bg_color:
+        styles.append(f"background:{_esc(bg_color)} !important")
+    size_key = ov.get("size")
+    if size_key and size_key in _SIZE_PRESETS:
+        size_category = "button" if element_type == "button" else (
+            "title" if element_type in ("title", "card_title", "section_title") else
+            "subtitle" if element_type in ("subtitle", "card_desc") else "text"
+        )
+        font_size = _SIZE_PRESETS[size_key].get(size_category)
+        if font_size:
+            styles.append(f"font-size:{font_size} !important")
+    if not styles:
+        return ""
+    return f' style="{";".join(styles)}"'
+
+
 # ── Per-section-type renderers ──────────────────────────────────────────────
 # Every renderer now takes section_id as its first argument so each
 # individual editable element can be tagged with data-section-id +
-# data-element-id + data-element-type + data-element-text.
+# data-element-id + data-element-type + data-element-text. They also
+# receive `overrides` (this section's element_overrides dict) so direct
+# color/size edits from the Contextual Edit Panel are applied on render.
 
-def _el(section_id: str, element_id: str, element_type: str, text: Any, inner_html: str, extra_class: str = "") -> str:
+def _el(section_id: str, element_id: str, element_type: str, text: Any, inner_html: str,
+        extra_class: str = "", overrides: dict[str, Any] | None = None) -> str:
     """Wrap a piece of inner HTML as a clickable, selectable element."""
+    style_attr = _element_style_attr(overrides or {}, element_id, element_type)
     return (
         f'<span class="ed-el {extra_class}" '
         f'data-section-id="{section_id}" '
         f'data-element-id="{element_id}" '
         f'data-element-type="{element_type}" '
-        f'data-element-text="{_esc(text)}">{inner_html}</span>'
+        f'data-element-text="{_esc(text)}"{style_attr}>{inner_html}</span>'
     )
 
 
-def _render_navbar(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_navbar(sid: str, c: dict, color: str, color2: str, overrides: dict[str, Any], section_bg: str | None = None) -> str:
     nav_html = "".join(
         _el(sid, f"{sid}-nav-{i}", "nav_item", n,
-            f'<a href="#sec-{i}" class="nav-link">{n}</a>', "ed-el-inline")
+            f'<a href="#sec-{i}" class="nav-link">{n}</a>', "ed-el-inline", overrides)
         for i, n in enumerate(c.get("nav_items", []))
     )
     logo_text = c.get('logo_text', '')
-    logo_html = _el(sid, f"{sid}-logo", "title", logo_text, f'<div class="logo">{logo_text}</div>', "ed-el-inline")
+    logo_html = _el(sid, f"{sid}-logo", "title", logo_text, f'<div class="logo">{logo_text}</div>', "ed-el-inline", overrides)
     return f"""
-    <header>
+    <header{_bg_style_attr(section_bg)}>
       {logo_html}
       <nav>{nav_html}</nav>
     </header>"""
 
 
-def _render_hero(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_hero(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     title = c.get('title', '')
     subtitle = c.get('subtitle', '')
     pbtn = c.get('primary_button', '')
     sbtn = c.get('secondary_button', '')
 
-    title_html = _el(sid, f"{sid}-title", "title", title, f'<h1>{title}</h1>', "ed-el-block")
-    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<p>{subtitle}</p>', "ed-el-block")
+    title_html = _el(sid, f"{sid}-title", "title", title, f'<h1>{title}</h1>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<p>{subtitle}</p>', "ed-el-block", overrides)
     pbtn_html = _el(sid, f"{sid}-pbtn", "button", pbtn,
-                     f'<button class="btn-primary">{pbtn}</button>', "ed-el-inline")
+                     f'<button class="btn-primary">{pbtn}</button>', "ed-el-inline", overrides)
     sbtn_html = ""
     if sbtn:
         sbtn_html = _el(sid, f"{sid}-sbtn", "button", sbtn,
-                         f'<button class="btn-secondary">{sbtn}</button>', "ed-el-inline")
+                         f'<button class="btn-secondary">{sbtn}</button>', "ed-el-inline", overrides)
 
     return f"""
-    <div class="hero">
+    <div class="hero"{_bg_style_attr(section_bg)}>
       <div class="hero-inner">
         <div class="hero-badge">{c.get('badge','')}</div>
         {title_html}
@@ -129,7 +181,7 @@ def _render_hero(sid: str, c: dict, color: str, color2: str) -> str:
     </div>"""
 
 
-def _render_menu_grid(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_menu_grid(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     cards = ""
     for idx, item in enumerate(c.get("items", [])):
         item_id = f"{sid}-item-{idx}"
@@ -137,15 +189,15 @@ def _render_menu_grid(sid: str, c: dict, color: str, color2: str) -> str:
         desc = item.get('desc', '')
         price = item.get('price', '')
 
-        name_html = _el(sid, f"{item_id}-name", "card_title", name, f'<div class="m-name">{name}</div>', "ed-el-block")
-        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="m-desc">{desc}</div>', "ed-el-block")
+        name_html = _el(sid, f"{item_id}-name", "card_title", name, f'<div class="m-name">{name}</div>', "ed-el-block", overrides)
+        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="m-desc">{desc}</div>', "ed-el-block", overrides)
         price_html = ""
         if price:
-            price_html = _el(sid, f"{item_id}-price", "card_price", price, f'<div class="m-price">{price}</div>', "ed-el-block")
+            price_html = _el(sid, f"{item_id}-price", "card_price", price, f'<div class="m-price">{price}</div>', "ed-el-block", overrides)
         img_html = _el(sid, f"{item_id}-img", "image", item.get('icon', '✨'),
-                        f'<div class="m-img">{item.get("icon","✨")}</div>', "ed-el-block")
+                        f'<div class="m-img">{item.get("icon","✨")}</div>', "ed-el-block", overrides)
         btn_html = _el(sid, f"{item_id}-btn", "button", "انتخاب",
-                        '<button class="m-btn">انتخاب</button>', "ed-el-inline")
+                        '<button class="m-btn">انتخاب</button>', "ed-el-inline", overrides)
 
         cards += f"""
         <div class="m-card" data-section-id="{sid}" data-card-id="{item_id}">
@@ -160,44 +212,44 @@ def _render_menu_grid(sid: str, c: dict, color: str, color2: str) -> str:
 
     title = c.get('title', '')
     subtitle = c.get('subtitle', '')
-    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
-    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
 
     return f"""
-    <div class="section">
+    <div class="section"{_bg_style_attr(section_bg)}>
       {title_html}
       {subtitle_html}
       <div class="menu-grid">{cards}</div>
     </div>"""
 
 
-def _render_gallery(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_gallery(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     n = c.get("item_count", 4)
     items = "".join(
         _el(sid, f"{sid}-img-{i}", "image", "تصویر گالری",
-            '<div class="gallery-item">📷</div>', "ed-el-block")
+            '<div class="gallery-item">📷</div>', "ed-el-block", overrides)
         for i in range(n)
     )
     title = c.get('title', '')
     subtitle = c.get('subtitle', '')
-    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
-    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
     return f"""
-    <div class="section">
+    <div class="section"{_bg_style_attr(section_bg)}>
       {title_html}
       {subtitle_html}
       <div class="gallery-grid">{items}</div>
     </div>"""
 
 
-def _render_about(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_about(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     feats = "".join(f'<li>✓ {f}</li>' for f in c.get("features", []))
     title = c.get('title', '')
     body = c.get('body', '')
-    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="about-title">{title}</div>', "ed-el-block")
-    body_html = _el(sid, f"{sid}-body", "text", body, f'<div class="about-body">{body}</div>', "ed-el-block")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="about-title">{title}</div>', "ed-el-block", overrides)
+    body_html = _el(sid, f"{sid}-body", "text", body, f'<div class="about-body">{body}</div>', "ed-el-block", overrides)
     return f"""
-    <div class="section">
+    <div class="section"{_bg_style_attr(section_bg)}>
       <div class="about-wrap">
         <div class="about-icon">🏪</div>
         <div class="about-text">
@@ -209,14 +261,14 @@ def _render_about(sid: str, c: dict, color: str, color2: str) -> str:
     </div>"""
 
 
-def _render_benefits(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_benefits(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     cards = ""
     for idx, item in enumerate(c.get("items", [])):
         item_id = f"{sid}-item-{idx}"
         title = item.get('title', '')
         desc = item.get('desc', '')
-        title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="why-title">{title}</div>', "ed-el-block")
-        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="why-desc">{desc}</div>', "ed-el-block")
+        title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="why-title">{title}</div>', "ed-el-block", overrides)
+        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="why-desc">{desc}</div>', "ed-el-block", overrides)
         cards += f"""
         <div class="why-card" data-section-id="{sid}" data-card-id="{item_id}">
           <div class="why-icon">{item.get('icon','✅')}</div>
@@ -225,26 +277,26 @@ def _render_benefits(sid: str, c: dict, color: str, color2: str) -> str:
         </div>"""
     title = c.get('title', '')
     subtitle = c.get('subtitle', '')
-    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
-    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
     return f"""
-    <div class="section">
+    <div class="section"{_bg_style_attr(section_bg)}>
       {title_html}
       {subtitle_html}
       <div class="why-grid">{cards}</div>
     </div>"""
 
 
-def _render_form(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_form(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     title = c.get('title', '')
     subtitle = c.get('subtitle', '')
     submit_label = c.get('submit_label', 'ثبت')
-    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
-    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
     submit_html = _el(sid, f"{sid}-submit", "button", submit_label,
                        f'<button class="form-submit" onclick="event.stopPropagation();window.__mockSubmit()">{submit_label}</button>', "ed-el-inline")
     return f"""
-    <div class="section">
+    <div class="section"{_bg_style_attr(section_bg)}>
       {title_html}
       {subtitle_html}
       <div class="form-wrap">
@@ -257,28 +309,28 @@ def _render_form(sid: str, c: dict, color: str, color2: str) -> str:
     </div>"""
 
 
-def _render_cta(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_cta(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     title = c.get('title', '')
     subtitle = c.get('subtitle', '')
     btn_label = c.get('button_label', '')
-    title_html = _el(sid, f"{sid}-title", "title", title, f'<h2>{title}</h2>', "ed-el-block")
-    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<p>{subtitle}</p>', "ed-el-block")
-    btn_html = _el(sid, f"{sid}-btn", "button", btn_label, f'<button class="btn-primary">{btn_label}</button>', "ed-el-inline")
+    title_html = _el(sid, f"{sid}-title", "title", title, f'<h2>{title}</h2>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<p>{subtitle}</p>', "ed-el-block", overrides)
+    btn_html = _el(sid, f"{sid}-btn", "button", btn_label, f'<button class="btn-primary">{btn_label}</button>', "ed-el-inline", overrides)
     return f"""
-    <div class="cta">
+    <div class="cta"{_bg_style_attr(section_bg)}>
       {title_html}
       {subtitle_html}
       {btn_html}
     </div>"""
 
 
-def _render_footer(sid: str, c: dict, color: str, color2: str) -> str:
+def _render_footer(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     site_name = c.get('site_name', '')
     tagline = c.get('tagline', '')
-    name_html = _el(sid, f"{sid}-name", "title", site_name, f'<div class="footer-logo">{site_name}</div>', "ed-el-inline")
-    tagline_html = _el(sid, f"{sid}-tagline", "text", tagline, f'<div>{tagline}</div>', "ed-el-inline")
+    name_html = _el(sid, f"{sid}-name", "title", site_name, f'<div class="footer-logo">{site_name}</div>', "ed-el-inline", overrides)
+    tagline_html = _el(sid, f"{sid}-tagline", "text", tagline, f'<div>{tagline}</div>', "ed-el-inline", overrides)
     return f"""
-    <footer>
+    <footer{_bg_style_attr(section_bg)}>
       {name_html}
       {tagline_html}
     </footer>"""
