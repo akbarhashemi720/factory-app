@@ -322,6 +322,28 @@ def create_understanding(project_id: UUID, x_customer_id: Optional[str] = Header
         "detected_scenario": ai.get("detected_scenario"),
         "confidence": ai.get("confidence"),
         "confirmed_by_user": False,
+        # Rich structured fields — persisted so they survive into generate-preview
+        "product_type": ai.get("product_type"),
+        "business_domain": ai.get("business_domain"),
+        "website_intent": ai.get("website_intent"),
+        "primary_goal": ai.get("primary_goal"),
+        "target_users": ai.get("target_users"),
+        "product_name": ai.get("product_name"),
+        "visual_style": ai.get("visual_style"),
+        "color_palette": ai.get("color_palette") or {},
+        "hero_title": ai.get("hero_title"),
+        "hero_subtitle": ai.get("hero_subtitle"),
+        "primary_cta": ai.get("primary_cta"),
+        "secondary_cta": ai.get("secondary_cta"),
+        "navigation_items": ai.get("navigation_items") or [],
+        "required_sections": ai.get("required_sections") or ai.get("sections") or [],
+        "user_actions": ai.get("user_actions") or [],
+        "owner_actions": ai.get("owner_actions") or [],
+        "suggested_features": ai.get("suggested_features") or [],
+        "menu_items": ai.get("menu_items") or [],
+        "benefits": ai.get("benefits") or [],
+        "about_text": ai.get("about_text"),
+        "first_version_scope": ai.get("first_version_scope"),
     }
     und_result = db.table("understandings").insert(und_data).execute()
     if not und_result.data:
@@ -402,13 +424,38 @@ def answer_diagnostic(project_id: UUID, body: AnswerDiagnosticRequest, x_custome
         raise HTTPException(status_code=500,
                             detail=f"PM Agent refine failed: {e}") from e
 
-    # Update understanding row with refined bullets
+    # Update understanding row with refined bullets + rich fields
+    # Rich fields fall back to the existing Phase-1 value if refine() doesn't override them,
+    # so structured data from Claude's first pass is never silently dropped.
     now = _now_iso()
     db.table("understandings").update({
         "bullets":           refined.get("bullets", []),
         "assumptions":       refined.get("assumptions", []),
         "clarification_questions": [],
+        "detected_scenario": refined.get("detected_scenario") or und_row.get("detected_scenario"),
         "updated_at":        now,
+        # Rich structured fields
+        "product_type":        refined.get("product_type") or und_row.get("product_type"),
+        "business_domain":     refined.get("business_domain") or und_row.get("business_domain"),
+        "website_intent":      refined.get("website_intent") or und_row.get("website_intent"),
+        "primary_goal":        refined.get("primary_goal") or und_row.get("primary_goal"),
+        "target_users":        refined.get("target_users") or und_row.get("target_users"),
+        "product_name":        refined.get("product_name") or und_row.get("product_name"),
+        "visual_style":        refined.get("visual_style") or und_row.get("visual_style"),
+        "color_palette":       refined.get("color_palette") or und_row.get("color_palette") or {},
+        "hero_title":          refined.get("hero_title") or und_row.get("hero_title"),
+        "hero_subtitle":       refined.get("hero_subtitle") or und_row.get("hero_subtitle"),
+        "primary_cta":         refined.get("primary_cta") or und_row.get("primary_cta"),
+        "secondary_cta":       refined.get("secondary_cta") or und_row.get("secondary_cta"),
+        "navigation_items":    refined.get("navigation_items") or und_row.get("navigation_items") or [],
+        "required_sections":   refined.get("required_sections") or und_row.get("required_sections") or [],
+        "user_actions":        refined.get("user_actions") or und_row.get("user_actions") or [],
+        "owner_actions":       refined.get("owner_actions") or und_row.get("owner_actions") or [],
+        "suggested_features":  refined.get("suggested_features") or und_row.get("suggested_features") or [],
+        "menu_items":          refined.get("menu_items") or und_row.get("menu_items") or [],
+        "benefits":            refined.get("benefits") or und_row.get("benefits") or [],
+        "about_text":          refined.get("about_text") or und_row.get("about_text"),
+        "first_version_scope": refined.get("first_version_scope") or und_row.get("first_version_scope"),
     }).eq("id", str(body.understanding_id)).execute()
 
     # Update project scenario if refined
