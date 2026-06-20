@@ -294,6 +294,15 @@ class ApproveVersionResponse(BaseModel):
 class RevisionRequestBody(BaseModel):
     raw_revision_text: str = Field(..., min_length=1)
     from_version_id: UUID | None = None
+    # Contextual editing — populated when the user clicked a specific
+    # element/section in the full-site preview before describing the
+    # change. All optional: when absent, the AI falls back to guessing
+    # from the request text + full section list (the old behavior).
+    selected_element_id: str | None = None
+    selected_element_type: str | None = None
+    selected_element_text: str | None = None
+    selected_section_id: str | None = None
+    selected_section_type: str | None = None
 
 
 class SaveHtmlRequest(BaseModel):
