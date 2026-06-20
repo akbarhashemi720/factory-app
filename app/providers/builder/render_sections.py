@@ -86,6 +86,23 @@ _SIZE_PRESETS = {
 }
 
 
+def _card_bg_style_attr(overrides: dict[str, Any], item_id: str) -> str:
+    """
+    "رنگ زمینه" chosen while editing a card's title/desc/price must color
+    the whole VISIBLE card (.m-card / .why-card), not a thin strip behind
+    one text element. The frontend stores this under the item's own key
+    (item_id, e.g. "{section_id}-item-2") — distinct from the per-element
+    text-color overrides stored under the sub-element ids.
+    """
+    ov = overrides.get(item_id)
+    if not ov:
+        return ""
+    bg = ov.get("background_color")
+    if bg:
+        return f' style="background:{_esc(bg)} !important"'
+    return ""
+
+
 def _element_style_attr(overrides: dict[str, Any], element_id: str, element_type: str) -> str:
     """
     Build an inline style="" attribute from this element's direct overrides
@@ -100,7 +117,10 @@ def _element_style_attr(overrides: dict[str, Any], element_id: str, element_type
     if color:
         styles.append(f"color:{_esc(color)} !important")
     bg_color = ov.get("background_color")
-    if bg_color:
+    # For card sub-elements (title/desc/price), background is applied at
+    # the card container level (.m-card) via _card_bg_style_attr instead —
+    # putting it here would only color a thin strip behind the text.
+    if bg_color and element_type not in ("card_title", "card_desc", "card_price"):
         styles.append(f"background:{_esc(bg_color)} !important")
     size_key = ov.get("size")
     if size_key and size_key in _SIZE_PRESETS:
@@ -199,8 +219,14 @@ def _render_menu_grid(sid: str, c: dict, color: str, color2: str, overrides: dic
         btn_html = _el(sid, f"{item_id}-btn", "button", "انتخاب",
                         '<button class="m-btn">انتخاب</button>', "ed-el-inline", overrides)
 
+        # "رنگ زمینه" on a card title/desc must color the whole VISIBLE
+        # card container (.m-card), not just a thin strip behind the text
+        # span — look up the card-level background override by item_id
+        # (set when either the title or desc element's bg color is chosen).
+        card_bg = _card_bg_style_attr(overrides, item_id)
+
         cards += f"""
-        <div class="m-card" data-section-id="{sid}" data-card-id="{item_id}">
+        <div class="m-card" data-section-id="{sid}" data-card-id="{item_id}"{card_bg}>
           {img_html}
           <div class="m-card-body">
             {name_html}
@@ -269,8 +295,9 @@ def _render_benefits(sid: str, c: dict, color: str, color2: str, overrides: dict
         desc = item.get('desc', '')
         title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="why-title">{title}</div>', "ed-el-block", overrides)
         desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="why-desc">{desc}</div>', "ed-el-block", overrides)
+        card_bg = _card_bg_style_attr(overrides, item_id)
         cards += f"""
-        <div class="why-card" data-section-id="{sid}" data-card-id="{item_id}">
+        <div class="why-card" data-section-id="{sid}" data-card-id="{item_id}"{card_bg}>
           <div class="why-icon">{item.get('icon','✅')}</div>
           {title_html}
           {desc_html}
