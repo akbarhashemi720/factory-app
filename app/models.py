@@ -159,9 +159,9 @@ class ApprovedVersionRow(BaseModel):
     id: UUID
     project_id: UUID
     version_id: UUID
-    approved_at: datetime
-    user_feedback: str | None
-    final_summary: str | None
+    approved_at: datetime = None
+    user_feedback: str | None = None
+    final_summary: str | None = None
 
 
 class LearningNoteRow(BaseModel):
@@ -294,6 +294,23 @@ class ApproveVersionResponse(BaseModel):
 class RevisionRequestBody(BaseModel):
     raw_revision_text: str = Field(..., min_length=1)
     from_version_id: UUID | None = None
+
+
+class SaveHtmlRequest(BaseModel):
+    """Save edited HTML from the GrapesJS website editor back onto the current version.
+
+    This is a direct save (no AI re-interpretation) — the user has already
+    made their edits visually in the editor; we just persist the result.
+    """
+    version_id: UUID
+    html_preview: str = Field(..., min_length=1)
+
+
+class SaveHtmlResponse(BaseModel):
+    project_id: UUID
+    version_id: UUID
+    preview_data: dict[str, Any]
+    message: str
 
 
 class GenerateRevisionResponse(BaseModel):
