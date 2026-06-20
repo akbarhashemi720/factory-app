@@ -320,7 +320,7 @@ _BASE_CSS = """
   html {{ scroll-behavior:smooth; }}
   body {{ font-family:{font}; background:#FBF7F0; color:#2D2424; direction:rtl; line-height:1.7; }}
 
-  .ed-section {{ position:relative; }}
+  .ed-section {{ position:relative; cursor:pointer; }}
   .ed-el {{ cursor:pointer; transition:outline .12s, background-color .12s; border-radius:4px; }}
   .ed-el-block {{ display:block; }}
   .ed-el-inline {{ display:inline-block; }}
@@ -405,9 +405,30 @@ window.__selectElement = function(el, ev) {
     }, '*');
   }
 };
+window.__selectSectionBackground = function(sectionEl) {
+  document.querySelectorAll('.ed-selected').forEach(e => e.classList.remove('ed-selected'));
+  if (window.parent) {
+    window.parent.postMessage({
+      type: 'element-selected',
+      elementId: null,
+      elementType: null,
+      elementText: null,
+      sectionId: sectionEl.getAttribute('data-section-id'),
+      sectionType: sectionEl.getAttribute('data-section-type'),
+    }, '*');
+  }
+};
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.ed-el').forEach(function(el) {
     el.addEventListener('click', function(ev) { window.__selectElement(el, ev); });
+  });
+  // Clicking the empty background of a section (not a specific element)
+  // selects the whole section — e.g. clicking the hero's gradient area.
+  document.querySelectorAll('.ed-section').forEach(function(sec) {
+    sec.addEventListener('click', function(ev) {
+      if (ev.target.closest('.ed-el')) return; // a more specific element already handled it
+      window.__selectSectionBackground(sec);
+    });
   });
 });
 window.__mockSubmit = function() {
