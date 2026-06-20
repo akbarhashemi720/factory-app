@@ -28,10 +28,11 @@ def generate(
     if has_rich_data:
         spec = _spec_from_understanding(understanding)
     else:
-        # No rich Claude data available — use scenario-based fallback
+        # No rich Claude data available — use website_intent-aware scenario fallback
         from app.providers.builder.html_builder import _build_spec
         scenario = understanding.get("detected_scenario") or project.get("scenario") or "general"
-        spec = _build_spec(scenario, understanding)
+        website_intent = understanding.get("website_intent")
+        spec = _build_spec(scenario, understanding, website_intent)
 
     html = _render_rich_html(spec)
 
