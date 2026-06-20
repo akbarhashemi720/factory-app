@@ -183,6 +183,27 @@ def apply_item_field_edit(sections: list[dict[str, Any]], section_id: str,
     return sections
 
 
+def apply_element_style_edit(sections: list[dict[str, Any]], section_id: str,
+                              element_id: str, style_key: str, style_value: Any) -> list[dict[str, Any]]:
+    """
+    Set a direct, per-ELEMENT style override (color, font-size, ...) —
+    deterministic, no AI involved. Used by the Contextual Edit Panel's
+    direct color/size buttons, which must work instantly without going
+    through natural-language interpretation.
+
+    Stored at sec["style"]["element_overrides"][element_id][style_key],
+    and applied by render_sections.py when rendering that element.
+    """
+    for sec in sections:
+        if sec["id"] == section_id:
+            sec.setdefault("style", {})
+            sec["style"].setdefault("element_overrides", {})
+            sec["style"]["element_overrides"].setdefault(element_id, {})
+            sec["style"]["element_overrides"][element_id][style_key] = style_value
+            break
+    return sections
+
+
 def reorder_section(sections: list[dict[str, Any]], section_id: str,
                      direction: str) -> list[dict[str, Any]]:
     """direction: 'up' or 'down'. Swap with neighbor."""
