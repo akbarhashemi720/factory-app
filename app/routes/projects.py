@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -1069,12 +1070,23 @@ def edit_direct(project_id: UUID, body: DirectEditRequest,
 
     # 2. Per-element style overrides (color / size / icon) — deterministic,
     #    rendered directly by render_sections.py without any AI step.
+    #    Text color ("رنگ نوشته") and size apply to the specific element
+    #    itself. Background color ("رنگ زمینه") on a CARD sub-element
+    #    (card_title/card_desc/card_price) must color the whole visible
+    #    card, not a thin strip behind the text — so it's stored under
+    #    the item's own key (item_id), matching render_sections.py's
+    #    _card_bg_style_attr lookup.
     if body.selected_element_id and (body.color or body.size or body.icon or body.background_color):
         if body.color:
             sections = apply_element_style_edit(sections, sid, body.selected_element_id, "color", body.color)
             applied_anything = True
         if body.background_color:
-            sections = apply_element_style_edit(sections, sid, body.selected_element_id, "background_color", body.background_color)
+            is_card_subelement = body.item_index is not None and re.search(r"-item-\d+-", body.selected_element_id or "")
+            if is_card_subelement:
+                item_key = re.sub(r"(-item-\d+)-.*$", r"\1", body.selected_element_id)
+                sections = apply_element_style_edit(sections, sid, item_key, "background_color", body.background_color)
+            else:
+                sections = apply_element_style_edit(sections, sid, body.selected_element_id, "background_color", body.background_color)
             applied_anything = True
         if body.size:
             sections = apply_element_style_edit(sections, sid, body.selected_element_id, "size", body.size)
