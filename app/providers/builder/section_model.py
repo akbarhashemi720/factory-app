@@ -166,6 +166,23 @@ def apply_section_edit(sections: list[dict[str, Any]], section_id: str,
     return sections
 
 
+def apply_item_field_edit(sections: list[dict[str, Any]], section_id: str,
+                           item_index: int, field_key: str, new_value: Any) -> list[dict[str, Any]]:
+    """
+    Update one field on one item WITHIN a section's items list — e.g. a single
+    menu card's name/desc/price, or a single benefit card's title/desc.
+    Used for contextual edits like "این کارت رو ... کن" where the user
+    clicked one specific card, not the whole section.
+    """
+    for sec in sections:
+        if sec["id"] == section_id:
+            items = sec["content"].get("items")
+            if isinstance(items, list) and 0 <= item_index < len(items):
+                items[item_index][field_key] = new_value
+            break
+    return sections
+
+
 def reorder_section(sections: list[dict[str, Any]], section_id: str,
                      direction: str) -> list[dict[str, Any]]:
     """direction: 'up' or 'down'. Swap with neighbor."""
