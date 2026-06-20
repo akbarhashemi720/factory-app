@@ -1,16 +1,18 @@
 """
-Anthropic Builder — Builder v2.
+Anthropic Builder — Builder v2/v3.
 
 Converts the rich structured understanding (from anthropic_pm) into a
-polished, real-feeling HTML/CSS website preview — reusing the same
-visual rendering engine as html_builder, but driven by Claude's actual
-content instead of static scenario templates.
+polished, real-feeling, EDITABLE website preview — using the same
+section-block model and renderer as html_builder (v3), so the click-to-edit
+full-page editor works identically regardless of which provider built
+the spec.
 
 Falls back to html_builder (scenario templates) if rich fields are missing.
 """
 from __future__ import annotations
 from typing import Any
-from app.providers.builder.html_builder import _render_html as _render_rich_html
+from app.providers.builder.section_model import build_sections_from_spec
+from app.providers.builder.render_sections import render_website
 
 
 def generate(
@@ -19,7 +21,7 @@ def generate(
     scenario_pattern: dict | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    """Build a rich preview from Claude's structured understanding."""
+    """Build a rich, editable preview from Claude's structured understanding."""
 
     # If understanding has rich fields (menu_items, benefits, etc.) from Claude,
     # use them directly. Otherwise fall back to scenario template.
@@ -34,11 +36,19 @@ def generate(
         website_intent = understanding.get("website_intent")
         spec = _build_spec(scenario, understanding, website_intent)
 
-    html = _render_rich_html(spec)
+    sections = build_sections_from_spec(spec)
+    global_style = {
+        "primary_color": spec.get("color", "#4F46E5"),
+        "secondary_color": spec.get("color2", "#818CF8"),
+        "border_radius": "14px",
+        "font_family": "Tahoma,Arial,sans-serif",
+    }
+    html = render_website(sections, global_style)
 
     return {
         "preview_data": {
             "scenario":     understanding.get("detected_scenario", "general"),
+            "website_intent": understanding.get("website_intent"),
             "title":        spec["name"],
             "subtitle":     spec["tagline"],
             "product_type": spec["type"],
@@ -46,6 +56,8 @@ def generate(
             "features":     spec.get("features", []),
             "html_preview": html,
             "_is_html_preview": True,
+            "section_blocks": sections,
+            "global_style": global_style,
         },
         "change_summary": [
             f"پیش‌نمایش اولیه «{spec['name']}» ساخته شد",
