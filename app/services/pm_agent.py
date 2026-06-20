@@ -43,14 +43,25 @@ def refine_understanding(raw_text: str, diagnostic_answer: str,
     """
     Phase 2: incorporate user's diagnostic answer into refined understanding.
     Returns bullets, confirmed scenario, and no further questions.
+
+    Uses the SAME provider as Phase 1 — mock is only an emergency fallback
+    inside each provider's own refine(), not the default path here.
     """
     from app.config import settings
     provider = settings.pm_provider.lower()
 
-    # OpenAI / Anthropic providers fall back to mock for Phase 2 in MVP
-    if provider in ("openai", "anthropic"):
-        from app.providers.pm.mock_pm import refine
-        return refine(raw_text, diagnostic_answer, detected_scenario, language)
+    if provider == "openai":
+        try:
+            from app.providers.pm.openai_pm import refine
+            return refine(raw_text, diagnostic_answer, detected_scenario, language,
+                          api_key=settings.openai_api_key)
+        except ImportError:
+            from app.providers.pm.mock_pm import refine
+            return refine(raw_text, diagnostic_answer, detected_scenario, language)
+    if provider == "anthropic":
+        from app.providers.pm.anthropic_pm import refine
+        return refine(raw_text, diagnostic_answer, detected_scenario, language,
+                      api_key=settings.anthropic_api_key)
 
     from app.providers.pm.mock_pm import refine
     return refine(raw_text, diagnostic_answer, detected_scenario, language)
