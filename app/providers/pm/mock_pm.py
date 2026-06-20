@@ -341,8 +341,19 @@ def _entry_mode(text: str) -> str:
 # ─── Phase 1: generate ────────────────────────────────────────────────────────
 
 def _extract_business_domain(text: str) -> str | None:
-    """Best-effort domain extraction for builder spec selection (mock path only)."""
-    cooking_kw = ["آشپز", "غذا", "پخت", "کیک", "شیرینی"]
+    """Best-effort domain extraction for builder spec selection (mock path only).
+
+    Only fires for EDUCATION-flavored text — must see a teaching/class/course
+    signal alongside the topic keyword, otherwise "سفارش غذا" (food ordering)
+    gets wrongly classified as "آموزش آشپزی" (cooking education) just because
+    it contains "غذا".
+    """
+    edu_signal = ["آموزش", "کلاس", "دوره", "یاد بگیر", "یادگیری", "تدریس"]
+    has_edu = any(k in text for k in edu_signal)
+    if not has_edu:
+        return None
+
+    cooking_kw = ["آشپز", "پخت", "کیک", "شیرینی"]  # "غذا" removed — too broad, matches ordering too
     music_kw   = ["موسیقی", "ساز", "آواز", "گیتار", "پیانو"]
     if any(k in text for k in cooking_kw):
         return "آموزش آشپزی"
@@ -353,11 +364,79 @@ def _extract_business_domain(text: str) -> str | None:
     return None
 
 
+_CAFE_INTRO_KW      = ["معرفی", "منو", "گالری", "نمایش منو"]
+_CAFE_RESERVE_KW    = ["رزرو میز", "رزرو", "میز خالی"]
+_CAFE_ORDER_KW      = ["سفارش آنلاین", "سفارش غذا", "سفارش نوشیدنی", "ثبت سفارش"]
+_CAFE_ECOMMERCE_KW  = ["فروش قهوه", "فروش محصولات", "فروشگاه قهوه", "فروش دانه قهوه"]
+
+
+def _detect_website_intent(scenario: str, text: str) -> tuple[str, bool]:
+    """
+    Return (website_intent, is_ambiguous).
+    is_ambiguous=True means the request needs a clarification question
+    before generating — used only for the cafe/restaurant family for now.
+    """
+    if scenario == "restaurant":
+        has_intro   = any(k in text for k in _CAFE_INTRO_KW)
+        has_reserve = any(k in text for k in _CAFE_RESERVE_KW)
+        has_order   = any(k in text for k in _CAFE_ORDER_KW)
+        has_eco     = any(k in text for k in _CAFE_ECOMMERCE_KW)
+
+        signals = sum([has_intro, has_reserve, has_order, has_eco])
+        if signals >= 2:
+            return "cafe_hybrid", False
+        if has_eco:
+            return "coffee_ecommerce", False
+        if has_order:
+            return "cafe_ordering", False
+        if has_reserve:
+            return "cafe_reservation", False
+        if has_intro:
+            return "cafe_intro", False
+        # No specific signal at all → ambiguous, must ask
+        return "cafe_intro", True
+
+    if scenario == "general_class":
+        domain = _extract_business_domain(text) or ""
+        if "آشپز" in domain:
+            return "cooking_education", False
+        if "زبان" in domain and ("کودک" in text or "بچه" in text):
+            return "children_english_education", False
+        return "education_website", False
+
+    if scenario == "booking" or scenario == "telegram_bot":
+        return "service_booking", False
+
+    return "general_website", False
+
+
+_CAFE_CLARIFY_OPTIONS = [
+    "معرفی کافه و نمایش منو",
+    "رزرو میز",
+    "سفارش آنلاین",
+    "فروش محصولات قهوه",
+    "ترکیبی از چند مورد",
+]
+
+
 def generate(raw_text: str, language: str = "fa") -> dict[str, Any]:
-    """Public entry point — adds business_domain best-effort, then delegates."""
+    """Public entry point — adds business_domain + website_intent best-effort, then delegates."""
     result = _generate_impl(raw_text, language)
     if "business_domain" not in result or not result.get("business_domain"):
         result["business_domain"] = _extract_business_domain(raw_text)
+
+    scenario = result.get("detected_scenario", "general")
+    intent, is_ambiguous = _detect_website_intent(scenario, raw_text)
+    result["website_intent"] = intent
+
+    if is_ambiguous:
+        # Override with an explicit, non-technical clarification question —
+        # don't let the system guess confidently on a vague cafe request.
+        result["has_diagnostic_question"] = True
+        result["diagnostic_question"] = "می‌خواهی سایت کافه بیشتر برای چه کاری باشد؟"
+        result["diagnostic_options"] = _CAFE_CLARIFY_OPTIONS
+        result["confidence"] = "low"
+
     return result
 
 
@@ -460,11 +539,35 @@ def refine(raw_text: str, diagnostic_answer: str,
     # Resolve general sub-scenarios to a concrete one for builder
     resolved = _resolve_scenario(scenario, a)
 
+    # Resolve website_intent — prefer what the ORIGINAL raw_text already signals
+    # (e.g. "فروش قهوه" → coffee_ecommerce) over a generic diagnostic answer like
+    # "سفارش مستقیم از صفحه", which only distinguishes ordering vs contact-only
+    # and should not silently downgrade a clearer ecommerce/reservation intent.
+    original_intent, original_ambiguous = _detect_website_intent(resolved, raw_text)
+    website_intent = original_intent
+
+    if resolved == "restaurant" and original_ambiguous:
+        # Only let the diagnostic answer decide when the original text was vague
+        if "معرفی" in diagnostic_answer or "منو" in diagnostic_answer:
+            website_intent = "cafe_intro"
+        elif "رزرو" in diagnostic_answer:
+            website_intent = "cafe_reservation"
+        elif "سفارش" in diagnostic_answer:
+            website_intent = "cafe_ordering"
+        elif "فروش" in diagnostic_answer or "محصولات قهوه" in diagnostic_answer:
+            website_intent = "coffee_ecommerce"
+        elif "ترکیبی" in diagnostic_answer:
+            website_intent = "cafe_hybrid"
+
+    business_domain = _extract_business_domain(raw_text)
+
     return {
         "bullets":                 bullets,
         "assumptions":             [],
         "clarification_questions": [],
         "detected_scenario":       resolved,
+        "website_intent":          website_intent,
+        "business_domain":         business_domain,
         "confidence":              "high",
         "has_diagnostic_question": False,
         "diagnostic_answer":       diagnostic_answer,
@@ -479,9 +582,11 @@ def _resolve_scenario(scenario: str, answer: str) -> str:
             return "restaurant"
         return "store"
     if scenario == "general_class":
-        if "ثبت‌نام" in a or "رزرو" in a:
-            return "booking"
-        return "dashboard"
+        # NEVER route to booking — classes/courses always stay general_class,
+        # even when the answer mentions "ثبت‌نام" or "رزرو" (class registration,
+        # not appointment booking). This was the root cause of cooking education
+        # becoming a barbershop/booking page.
+        return "general_class"
     if scenario == "general_showcase":
         if "سفارش" in a:
             return "store"
