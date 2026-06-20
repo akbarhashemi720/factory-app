@@ -31,7 +31,7 @@ from app.services.exporter import create_export_package
 from app.services.memory import (create_learning_note, create_reusable_pattern,
                                   find_latest_pattern_for_scenario)
 from app.services.pm_agent import generate_understanding, refine_understanding
-from app.services.revision import apply_revision_to_preview, interpret_revision
+from app.services.ai_revision import interpret_and_apply
 from app.services.reviewer import review_preview
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -758,25 +758,69 @@ def request_revision(project_id: UUID, body: RevisionRequestBody, x_customer_id:
             detail="Only the current version can be revised.",
         )
 
-    # ── Interpret revision ────────────────────────────────────────────────────
-    actions = interpret_revision(body.raw_revision_text)
+    # ── Interpret & apply revision directly on section_blocks ─────────────────
+    # This is the actual fix for "click اعمال تغییر and nothing happens":
+    # the old engine edited stale mock-only fields (title, primary_button)
+    # that the real html_preview never read. The new engine edits the live
+    # section_blocks + global_style and RE-RENDERS html_preview, so every
+    # applied change is immediately visible in the output.
+    base_preview = base_version.get("user_visible_preview") or {}
+    base_sections = base_preview.get("section_blocks")
+    base_style = base_preview.get("global_style") or {
+        "primary_color": "#4F46E5", "secondary_color": "#818CF8",
+        "border_radius": "14px", "font_family": "Tahoma,Arial,sans-serif",
+    }
 
-    # ── Save revision request (pending) ──────────────────────────────────────
+    if not base_sections:
+        # Older version without a section model — cannot apply a structured
+        # edit. Be honest rather than silently doing nothing.
+        raise HTTPException(
+            status_code=400,
+            detail="این نسخه قابلیت ویرایش با توضیح متنی را ندارد. لطفاً دوباره پیش‌نمایش بساز.",
+        )
+
+    from app.config import settings as _settings
+    revision_result = interpret_and_apply(
+        body.raw_revision_text, base_sections, base_style,
+        api_key=_settings.anthropic_api_key,
+    )
+
+    # ── Save revision request ──────────────────────────────────────────────────
     revision_data = {
         "project_id": str(project_id),
         "from_version_id": str(from_version_id),
         "raw_revision_text": body.raw_revision_text,
-        "interpreted_actions": actions,
-        "status": "pending",
+        "interpreted_actions": [{"type": "ai_revision", "value": body.raw_revision_text}],
+        "status": "pending" if revision_result["success"] else "needs_clarification",
     }
     rev_result = db.table("revision_requests").insert(revision_data).execute()
     if not rev_result.data:
         raise HTTPException(status_code=500, detail="Failed to save revision request")
     revision_request_id = rev_result.data[0]["id"]
 
-    # ── Apply revision to previous preview ────────────────────────────────────
-    base_preview = base_version.get("user_visible_preview") or {}
-    new_preview_data = apply_revision_to_preview(base_preview, actions)
+    # ── If the request wasn't clear enough, ask — never fail silently ─────────
+    if not revision_result["success"]:
+        db.table("revision_requests").update({
+            "status": "needs_clarification", "updated_at": _now_iso(),
+        }).eq("id", revision_request_id).execute()
+        return GenerateRevisionResponse(
+            project_id=project_id,
+            revision_request_id=revision_request_id,
+            from_version_id=from_version_id,
+            new_version_id=from_version_id,   # nothing new was created
+            output_id=base_version.get("output_id") or revision_request_id,
+            review_report_id=base_version.get("review_report_id") or revision_request_id,
+            status="ready_for_user_review",
+            preview_data=None,
+            message=revision_result["clarification_question"],
+        )
+
+    new_preview_data = dict(base_preview)
+    new_preview_data["section_blocks"] = revision_result["sections"]
+    new_preview_data["global_style"] = revision_result["global_style"]
+    new_preview_data["html_preview"] = revision_result["html_preview"]
+    new_preview_data["_is_html_preview"] = True
+    change_summary_text = revision_result["summary"]
 
     # ── Determine new version number ──────────────────────────────────────────
     versions_result = (
@@ -812,8 +856,7 @@ def request_revision(project_id: UUID, body: RevisionRequestBody, x_customer_id:
         "version_id": new_version_id,
         "output_type": "preview_json",
         "preview_data": new_preview_data,
-        "change_summary": [a.get("type", "") + ": " + a.get("value", "")[:40]
-                           for a in actions],
+        "change_summary": [change_summary_text],
         "known_limitations": ["این نسخه اصلاح‌شده همچنان یک پیش‌نمایش است"],
     }
     output_result = db.table("builder_outputs").insert(output_data).execute()
@@ -909,7 +952,7 @@ def request_revision(project_id: UUID, body: RevisionRequestBody, x_customer_id:
         review_report_id=review_report_id,
         status="ready_for_user_review",
         preview_data=new_preview_data,
-        message="نسخه ویرایش‌شده آماده است. برای تأیید، دکمه همین خوبه را بزن.",
+        message="تغییر انجام شد.",
     )
 
 
