@@ -16,18 +16,20 @@ def generate(
 ) -> dict[str, Any]:
     """Generate a rich HTML/CSS preview based on understanding."""
 
+    website_intent = understanding.get("website_intent")
     scenario = (
         understanding.get("detected_scenario")
         or project.get("scenario")
         or "general"
     )
 
-    spec = _build_spec(scenario, understanding)
+    spec = _build_spec(scenario, understanding, website_intent)
     html = _render_html(spec)
 
     return {
         "preview_data": {
             "scenario":      scenario,
+            "website_intent": website_intent,
             "title":         spec["name"],
             "subtitle":      spec["tagline"],
             "product_type":  spec["type"],
@@ -50,19 +52,37 @@ def generate(
 
 # ── Spec builder ───────────────────────────────────────────────────────────────
 
-def _build_spec(scenario: str, und: dict) -> dict:
+def _build_spec(scenario: str, und: dict, website_intent: str | None = None) -> dict:
     domain = und.get("business_domain") or ""
     # Fallback: some keyword signal may live in bullets when business_domain is absent (mock path)
     signal_text = domain + " " + " ".join(und.get("bullets", []) or [])
 
-    SPECS = {
-        "restaurant": _restaurant_spec(),
-        "general_class": _education_spec(signal_text),
-        "booking": _booking_spec(),
-        "telegram_bot": _booking_spec(bot=True),
-        "store": _store_spec(),
+    # website_intent is the precise router — falls back to detected_scenario mapping
+    intent = website_intent or _scenario_to_intent(scenario)
+
+    INTENT_SPECS = {
+        "cafe_intro":                  _cafe_intro_spec(),
+        "cafe_reservation":            _cafe_reservation_spec(),
+        "cafe_ordering":               _cafe_ordering_spec(),
+        "coffee_ecommerce":            _coffee_ecommerce_spec(),
+        "cafe_hybrid":                 _cafe_hybrid_spec(),
+        "cooking_education":           _education_spec(signal_text),
+        "children_english_education":  _education_spec(signal_text),
+        "education_website":           _education_spec(signal_text),
+        "service_booking":             _booking_spec(),
     }
-    spec = SPECS.get(scenario, _general_spec())
+
+    spec = INTENT_SPECS.get(intent)
+    if spec is None:
+        # Legacy fallback by detected_scenario for any path that didn't set website_intent
+        SPECS = {
+            "restaurant": _cafe_intro_spec(),
+            "general_class": _education_spec(signal_text),
+            "booking": _booking_spec(),
+            "telegram_bot": _booking_spec(bot=True),
+            "store": _store_spec(),
+        }
+        spec = SPECS.get(scenario, _general_spec())
 
     if domain and len(domain) <= 24:
         spec["name"] = domain
@@ -70,17 +90,145 @@ def _build_spec(scenario: str, und: dict) -> dict:
     return spec
 
 
-def _restaurant_spec():
+def _scenario_to_intent(scenario: str) -> str:
+    """Best-effort mapping when website_intent is missing (legacy data)."""
+    return {
+        "restaurant": "cafe_intro",
+        "general_class": "education_website",
+        "booking": "service_booking",
+        "telegram_bot": "service_booking",
+        "store": "general_website",
+    }.get(scenario, "general_website")
+
+
+def _cafe_intro_spec():
+    """Cafe introduction website — showcase + menu display, no ordering/ecommerce."""
+    return {
+        "name": "کافه آرام",
+        "tagline": "قهوه تازه، طعم اصیل، فضای دلنشین",
+        "type": "سایت معرفی کافه",
+        "color": "#C2410C",
+        "color2": "#FB923C",
+        "hero_btn": "مشاهده منو",
+        "hero_btn2": "مشاهده گالری",
+        "nav_items": ["خانه", "منو", "گالری", "درباره ما", "تماس"],
+        "features": ["منوی کامل کافه", "گالری تصاویر فضای کافه", "معرفی کامل کافه", "اطلاعات تماس و آدرس"],
+        "menu_items": [
+            {"icon":"☕","name":"اسپرسو","desc":"دان تازه آسیاب‌شده","price":"۳۵,۰۰۰"},
+            {"icon":"🍰","name":"کیک شکلاتی","desc":"دستپخت روزانه","price":"۴۰,۰۰۰"},
+            {"icon":"🥐","name":"کروسان","desc":"تازه و ترد","price":"۳۰,۰۰۰"},
+            {"icon":"🍵","name":"چای سبز","desc":"خوش‌عطر","price":"۲۵,۰۰۰"},
+            {"icon":"🧁","name":"کاپ‌کیک","desc":"دستپخت خانگی","price":"۲۸,۰۰۰"},
+            {"icon":"🍪","name":"کوکی شکلاتی","desc":"ترد و خوش‌طعم","price":"۲۰,۰۰۰"},
+        ],
+        "why_us": [
+            {"icon":"⭐","title":"کیفیت بالا","desc":"مواد اولیه تازه و باکیفیت"},
+            {"icon":"🏡","title":"فضای دلنشین","desc":"مناسب برای نشست‌های دوستانه"},
+            {"icon":"❤️","title":"طعم اصیل","desc":"دستور پخت اختصاصی"},
+        ],
+        "about": "ما با عشق و دقت، فضایی گرم و دلنشین برای شما فراهم کرده‌ایم تا لحظات خوبی را با قهوه و خوراکی‌های تازه ما تجربه کنید.",
+    }
+
+
+def _cafe_reservation_spec():
+    """Cafe website focused on table reservation."""
+    return {
+        "name": "کافه آرام",
+        "tagline": "میزت رو از قبل رزرو کن، بدون معطلی بنشین",
+        "type": "سایت رزرو میز کافه",
+        "color": "#C2410C",
+        "color2": "#FB923C",
+        "hero_btn": "رزرو میز",
+        "hero_btn2": "مشاهده منو",
+        "nav_items": ["خانه", "رزرو میز", "منو", "درباره ما", "تماس"],
+        "features": ["رزرو آنلاین میز", "انتخاب تاریخ و ساعت", "تأیید رزرو فوری", "مدیریت میزهای کافه"],
+        "menu_items": [
+            {"icon":"☕","name":"اسپرسو","desc":"دان تازه آسیاب‌شده","price":"۳۵,۰۰۰"},
+            {"icon":"🍰","name":"کیک شکلاتی","desc":"دستپخت روزانه","price":"۴۰,۰۰۰"},
+            {"icon":"🥐","name":"کروسان","desc":"تازه و ترد","price":"۳۰,۰۰۰"},
+            {"icon":"🍵","name":"چای سبز","desc":"خوش‌عطر","price":"۲۵,۰۰۰"},
+            {"icon":"🧁","name":"کاپ‌کیک","desc":"دستپخت خانگی","price":"۲۸,۰۰۰"},
+            {"icon":"🍪","name":"کوکی شکلاتی","desc":"ترد و خوش‌طعم","price":"۲۰,۰۰۰"},
+        ],
+        "why_us": [
+            {"icon":"📅","title":"رزرو آسان","desc":"در چند ثانیه میز خود را رزرو کنید"},
+            {"icon":"⏱️","title":"بدون معطلی","desc":"میز شما از قبل آماده است"},
+            {"icon":"🏡","title":"فضای دلنشین","desc":"مناسب برای جلسات و دیدارها"},
+        ],
+        "about": "با رزرو آنلاین میز، دیگر لازم نیست منتظر جا خالی بمانید — میز خودتان را از قبل رزرو کنید و با آرامش وارد شوید.",
+    }
+
+
+def _cafe_ordering_spec():
+    """Cafe website focused on online food/drink ordering."""
+    return {
+        "name": "کافه آرام",
+        "tagline": "سفارش آسان، طعم عالی، تحویل سریع",
+        "type": "سایت سفارش آنلاین کافه",
+        "color": "#C2410C",
+        "color2": "#FB923C",
+        "hero_btn": "ثبت سفارش",
+        "hero_btn2": "مشاهده منو",
+        "nav_items": ["خانه", "منو", "سبد سفارش", "درباره ما", "تماس"],
+        "features": ["منوی آنلاین کامل", "ثبت سفارش از سایت", "پیگیری وضعیت سفارش", "پنل مدیریت سفارش‌ها"],
+        "menu_items": [
+            {"icon":"☕","name":"اسپرسو","desc":"دان تازه آسیاب‌شده","price":"۳۵,۰۰۰"},
+            {"icon":"🥤","name":"آیس‌لاته","desc":"خنک و انرژی‌بخش","price":"۴۵,۰۰۰"},
+            {"icon":"🍰","name":"کیک شکلاتی","desc":"دستپخت روزانه","price":"۴۰,۰۰۰"},
+            {"icon":"🥐","name":"کروسان","desc":"تازه و ترد","price":"۳۰,۰۰۰"},
+            {"icon":"🍵","name":"چای سبز","desc":"خوش‌عطر","price":"۲۵,۰۰۰"},
+            {"icon":"🧁","name":"کاپ‌کیک","desc":"دستپخت خانگی","price":"۲۸,۰۰۰"},
+        ],
+        "why_us": [
+            {"icon":"⚡","title":"سفارش سریع","desc":"تحویل در کمترین زمان"},
+            {"icon":"📍","title":"پیگیری سفارش","desc":"وضعیت سفارش را آنلاین ببینید"},
+            {"icon":"❤️","title":"طعم اصیل","desc":"دستور پخت اختصاصی"},
+        ],
+        "about": "هر سفارش شما با دقت و در سریع‌ترین زمان آماده و تحویل داده می‌شود — همه‌چیز فقط با چند کلیک.",
+    }
+
+
+def _coffee_ecommerce_spec():
+    """Coffee/cafe product e-commerce website — selling beans, equipment, etc."""
+    return {
+        "name": "فروشگاه قهوه آرام",
+        "tagline": "بهترین دانه‌های قهوه، مستقیم به دستان شما",
+        "type": "فروشگاه اینترنتی محصولات قهوه",
+        "color": "#7C2D12",
+        "color2": "#EA580C",
+        "hero_btn": "مشاهده محصولات",
+        "hero_btn2": "پیشنهادهای ویژه",
+        "nav_items": ["خانه", "محصولات", "دسته‌بندی‌ها", "سبد خرید", "تماس"],
+        "features": ["دسته‌بندی محصولات قهوه", "سبد خرید آنلاین", "پیگیری سفارش", "پرسش و پاسخ مشتریان"],
+        "menu_items": [
+            {"icon":"☕","name":"دان قهوه برزیلی","desc":"بسته ۲۵۰ گرمی، تازه برشت","price":"۱۸۰,۰۰۰"},
+            {"icon":"🫘","name":"قهوه فوری گلد","desc":"آماده مصرف، عطر فوق‌العاده","price":"۹۵,۰۰۰"},
+            {"icon":"🥤","name":"کافی میکس","desc":"بسته ۱۰ تایی","price":"۶۵,۰۰۰"},
+            {"icon":"🍫","name":"هات چاکلت","desc":"پودر فوری، طعم خاص","price":"۷۰,۰۰۰"},
+            {"icon":"⚙️","name":"موکاپات","desc":"دستگاه دم‌آوری قابل‌حمل","price":"۴۵۰,۰۰۰"},
+            {"icon":"🧊","name":"قهوه ترک","desc":"پودر نرم، طعم سنتی","price":"۸۵,۰۰۰"},
+        ],
+        "why_us": [
+            {"icon":"🚚","title":"ارسال سریع","desc":"تحویل به سراسر کشور"},
+            {"icon":"🌱","title":"دانه تازه","desc":"برشت‌شده در دفعات کوچک"},
+            {"icon":"💯","title":"کیفیت تضمینی","desc":"ضمانت بازگشت کالا"},
+        ],
+        "about": "ما بهترین دانه‌های قهوه و محصولات جانبی را با کیفیت بالا و قیمت مناسب مستقیم به دست شما می‌رسانیم.",
+    }
+
+
+def _cafe_hybrid_spec():
+    """Combination cafe website — intro + menu + reservation + ordering all together."""
     return {
         "name": "کافه و رستوران آرام",
         "tagline": "قهوه تازه، طعم اصیل، فضای دلنشین",
-        "type": "سایت معرفی و سفارش غذا",
+        "type": "سایت کامل کافه (معرفی، رزرو، سفارش)",
         "color": "#C2410C",
         "color2": "#FB923C",
         "hero_btn": "مشاهده منو",
         "hero_btn2": "رزرو میز",
-        "nav_items": ["خانه", "منو", "درباره ما", "رزرو", "تماس"],
-        "features": ["منو آنلاین کامل", "ثبت سفارش از سایت", "رزرو میز آنلاین", "پنل مدیریت سفارش‌ها"],
+        "nav_items": ["خانه", "منو", "رزرو میز", "سفارش آنلاین", "تماس"],
+        "features": ["منو آنلاین کامل", "ثبت سفارش از سایت", "رزرو میز آنلاین", "پنل مدیریت یکپارچه"],
         "menu_items": [
             {"icon":"🍕","name":"پیتزا مخصوص","desc":"پنیر، قارچ، فلفل دلمه‌ای","price":"۸۵,۰۰۰"},
             {"icon":"🍔","name":"برگر ویژه","desc":"گوشت گریل، سس مخصوص","price":"۶۵,۰۰۰"},
