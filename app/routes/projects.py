@@ -780,9 +780,19 @@ def request_revision(project_id: UUID, body: RevisionRequestBody, x_customer_id:
         )
 
     from app.config import settings as _settings
+    selected_context = None
+    if body.selected_element_id or body.selected_section_id:
+        selected_context = {
+            "selected_element_id": body.selected_element_id,
+            "selected_element_type": body.selected_element_type,
+            "selected_element_text": body.selected_element_text,
+            "selected_section_id": body.selected_section_id,
+            "selected_section_type": body.selected_section_type,
+        }
     revision_result = interpret_and_apply(
         body.raw_revision_text, base_sections, base_style,
         api_key=_settings.anthropic_api_key,
+        selected_context=selected_context,
     )
 
     # ── Save revision request ──────────────────────────────────────────────────
