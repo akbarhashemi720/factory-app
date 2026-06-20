@@ -21,6 +21,8 @@ from app.models import (
     ProjectStateResponse,
     ProjectSummary,
     RevisionRequestBody,
+    SaveHtmlRequest,
+    SaveHtmlResponse,
     SubmitRequestBody,
     SubmitRequestResponse,
 )
@@ -908,6 +910,45 @@ def request_revision(project_id: UUID, body: RevisionRequestBody, x_customer_id:
         status="ready_for_user_review",
         preview_data=new_preview_data,
         message="نسخه ویرایش‌شده آماده است. برای تأیید، دکمه همین خوبه را بزن.",
+    )
+
+
+# ─── POST /projects/{project_id}/save-html ───────────────────────────────────
+
+@router.post("/{project_id}/save-html", response_model=SaveHtmlResponse)
+def save_html(project_id: UUID, body: SaveHtmlRequest,
+              x_customer_id: Optional[str] = Header(default=None)):
+    """
+    Save HTML exported from the GrapesJS website editor back onto the
+    current version, in place — no new version number, no AI re-generation.
+
+    The user has already made their visual edits in the editor; this just
+    persists the result so it survives a refresh and is shown next time
+    the preview or editor opens.
+    """
+    db = get_db()
+    project = _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    ver_result = db.table("versions").select("*").eq("id", str(body.version_id)).execute()
+    if not ver_result.data:
+        raise HTTPException(status_code=404, detail="Version not found")
+    version = ver_result.data[0]
+    if version["project_id"] != str(project_id):
+        raise HTTPException(status_code=400, detail="Version does not belong to this project")
+
+    preview = version.get("user_visible_preview") or {}
+    preview["html_preview"] = body.html_preview
+    preview["_is_html_preview"] = True
+
+    db.table("versions").update(
+        {"user_visible_preview": preview}
+    ).eq("id", str(body.version_id)).execute()
+
+    return SaveHtmlResponse(
+        project_id=project_id,
+        version_id=body.version_id,
+        preview_data=preview,
+        message="تغییرات ذخیره شد.",
     )
 
 
