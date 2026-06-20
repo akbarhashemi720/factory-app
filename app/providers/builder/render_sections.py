@@ -1,17 +1,32 @@
 """
-Section Renderer — Website Builder v3.
+Section Renderer — Website Builder v4 (contextual element selection).
 
 Renders the section-block model (section_model.py) into a single HTML
 document. Every section wrapper carries:
-  - data-section-id  → for click-to-select in the parent frame
-  - data-section-type → for the editor panel to know which fields to show
+  - data-section-id   → which section this belongs to
+  - data-section-type → section type (hero, menu_grid, navbar, ...)
+
+In addition, individual EDITABLE ELEMENTS inside each section (the hero
+title, a button, a single menu card's name/desc/price, a nav link, ...)
+carry their own:
+  - data-element-id    → stable id for this specific element
+  - data-element-type  → "title" | "subtitle" | "button" | "card_title" |
+                          "card_desc" | "card_price" | "nav_item" | "text" | ...
+  - data-element-text  → the current visible text, used for chat context
 
 The parent page (index.html) listens for clicks inside the iframe via
 postMessage (injected script at the bottom of this document) and opens
-the right-side editor panel accordingly.
+the change panel pre-filled with this context — "چه چیزی را درباره
+«X» تغییر بدهیم؟" — instead of asking the user to explain which section
+they mean.
 """
 from __future__ import annotations
 from typing import Any
+import html as _html
+
+
+def _esc(text: Any) -> str:
+    return _html.escape(str(text), quote=True)
 
 
 def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any]) -> str:
@@ -28,10 +43,10 @@ def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any])
         renderer = _RENDERERS.get(sec["type"])
         if renderer is None:
             continue
-        section_html = renderer(sec["content"], color, color2)
+        section_html = renderer(sec["id"], sec["content"], color, color2)
         body_html += (
             f'<div class="ed-section" data-section-id="{sec["id"]}" '
-            f'data-section-type="{sec["type"]}" onclick="window.__selectSection(\'{sec["id"]}\', event)">'
+            f'data-section-type="{sec["type"]}">'
             f'{section_html}</div>'
         )
 
@@ -54,130 +69,218 @@ def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any])
 
 
 # ── Per-section-type renderers ──────────────────────────────────────────────
+# Every renderer now takes section_id as its first argument so each
+# individual editable element can be tagged with data-section-id +
+# data-element-id + data-element-type + data-element-text.
 
-def _render_navbar(c: dict, color: str, color2: str) -> str:
+def _el(section_id: str, element_id: str, element_type: str, text: Any, inner_html: str, extra_class: str = "") -> str:
+    """Wrap a piece of inner HTML as a clickable, selectable element."""
+    return (
+        f'<span class="ed-el {extra_class}" '
+        f'data-section-id="{section_id}" '
+        f'data-element-id="{element_id}" '
+        f'data-element-type="{element_type}" '
+        f'data-element-text="{_esc(text)}">{inner_html}</span>'
+    )
+
+
+def _render_navbar(sid: str, c: dict, color: str, color2: str) -> str:
     nav_html = "".join(
-        f'<a href="#sec-{i}" class="nav-link">{n}</a>'
+        _el(sid, f"{sid}-nav-{i}", "nav_item", n,
+            f'<a href="#sec-{i}" class="nav-link">{n}</a>', "ed-el-inline")
         for i, n in enumerate(c.get("nav_items", []))
     )
+    logo_text = c.get('logo_text', '')
+    logo_html = _el(sid, f"{sid}-logo", "title", logo_text, f'<div class="logo">{logo_text}</div>', "ed-el-inline")
     return f"""
     <header>
-      <div class="logo">{c.get('logo_text','')}</div>
+      {logo_html}
       <nav>{nav_html}</nav>
     </header>"""
 
 
-def _render_hero(c: dict, color: str, color2: str) -> str:
-    btn2 = f'<button class="btn-secondary">{c["secondary_button"]}</button>' if c.get("secondary_button") else ""
+def _render_hero(sid: str, c: dict, color: str, color2: str) -> str:
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    pbtn = c.get('primary_button', '')
+    sbtn = c.get('secondary_button', '')
+
+    title_html = _el(sid, f"{sid}-title", "title", title, f'<h1>{title}</h1>', "ed-el-block")
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<p>{subtitle}</p>', "ed-el-block")
+    pbtn_html = _el(sid, f"{sid}-pbtn", "button", pbtn,
+                     f'<button class="btn-primary">{pbtn}</button>', "ed-el-inline")
+    sbtn_html = ""
+    if sbtn:
+        sbtn_html = _el(sid, f"{sid}-sbtn", "button", sbtn,
+                         f'<button class="btn-secondary">{sbtn}</button>', "ed-el-inline")
+
     return f"""
     <div class="hero">
       <div class="hero-inner">
         <div class="hero-badge">{c.get('badge','')}</div>
-        <h1>{c.get('title','')}</h1>
-        <p>{c.get('subtitle','')}</p>
+        {title_html}
+        {subtitle_html}
         <div class="hero-btns">
-          <button class="btn-primary">{c.get('primary_button','')}</button>
-          {btn2}
+          {pbtn_html}
+          {sbtn_html}
         </div>
       </div>
       <div class="hero-wave"></div>
     </div>"""
 
 
-def _render_menu_grid(c: dict, color: str, color2: str) -> str:
+def _render_menu_grid(sid: str, c: dict, color: str, color2: str) -> str:
     cards = ""
-    for item in c.get("items", []):
-        price_html = f'<div class="m-price">{item.get("price","")}</div>' if item.get("price") else ""
+    for idx, item in enumerate(c.get("items", [])):
+        item_id = f"{sid}-item-{idx}"
+        name = item.get('name', '')
+        desc = item.get('desc', '')
+        price = item.get('price', '')
+
+        name_html = _el(sid, f"{item_id}-name", "card_title", name, f'<div class="m-name">{name}</div>', "ed-el-block")
+        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="m-desc">{desc}</div>', "ed-el-block")
+        price_html = ""
+        if price:
+            price_html = _el(sid, f"{item_id}-price", "card_price", price, f'<div class="m-price">{price}</div>', "ed-el-block")
+        img_html = _el(sid, f"{item_id}-img", "image", item.get('icon', '✨'),
+                        f'<div class="m-img">{item.get("icon","✨")}</div>', "ed-el-block")
+        btn_html = _el(sid, f"{item_id}-btn", "button", "انتخاب",
+                        '<button class="m-btn">انتخاب</button>', "ed-el-inline")
+
         cards += f"""
-        <div class="m-card">
-          <div class="m-img">{item.get('icon','✨')}</div>
+        <div class="m-card" data-section-id="{sid}" data-card-id="{item_id}">
+          {img_html}
           <div class="m-card-body">
-            <div class="m-name">{item.get('name','')}</div>
-            <div class="m-desc">{item.get('desc','')}</div>
+            {name_html}
+            {desc_html}
             {price_html}
-            <button class="m-btn">انتخاب</button>
+            {btn_html}
           </div>
         </div>"""
+
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
+
     return f"""
     <div class="section">
-      <div class="section-title">{c.get('title','')}</div>
-      <div class="section-sub">{c.get('subtitle','')}</div>
+      {title_html}
+      {subtitle_html}
       <div class="menu-grid">{cards}</div>
     </div>"""
 
 
-def _render_gallery(c: dict, color: str, color2: str) -> str:
+def _render_gallery(sid: str, c: dict, color: str, color2: str) -> str:
     n = c.get("item_count", 4)
-    items = "".join('<div class="gallery-item">📷</div>' for _ in range(n))
+    items = "".join(
+        _el(sid, f"{sid}-img-{i}", "image", "تصویر گالری",
+            '<div class="gallery-item">📷</div>', "ed-el-block")
+        for i in range(n)
+    )
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
     return f"""
     <div class="section">
-      <div class="section-title">{c.get('title','')}</div>
-      <div class="section-sub">{c.get('subtitle','')}</div>
+      {title_html}
+      {subtitle_html}
       <div class="gallery-grid">{items}</div>
     </div>"""
 
 
-def _render_about(c: dict, color: str, color2: str) -> str:
+def _render_about(sid: str, c: dict, color: str, color2: str) -> str:
     feats = "".join(f'<li>✓ {f}</li>' for f in c.get("features", []))
+    title = c.get('title', '')
+    body = c.get('body', '')
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="about-title">{title}</div>', "ed-el-block")
+    body_html = _el(sid, f"{sid}-body", "text", body, f'<div class="about-body">{body}</div>', "ed-el-block")
     return f"""
     <div class="section">
       <div class="about-wrap">
         <div class="about-icon">🏪</div>
         <div class="about-text">
-          <div class="about-title">{c.get('title','')}</div>
-          {c.get('body','')}
+          {title_html}
+          {body_html}
           <ul class="feature-list">{feats}</ul>
         </div>
       </div>
     </div>"""
 
 
-def _render_benefits(c: dict, color: str, color2: str) -> str:
+def _render_benefits(sid: str, c: dict, color: str, color2: str) -> str:
     cards = ""
-    for item in c.get("items", []):
+    for idx, item in enumerate(c.get("items", [])):
+        item_id = f"{sid}-item-{idx}"
+        title = item.get('title', '')
+        desc = item.get('desc', '')
+        title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="why-title">{title}</div>', "ed-el-block")
+        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="why-desc">{desc}</div>', "ed-el-block")
         cards += f"""
-        <div class="why-card">
+        <div class="why-card" data-section-id="{sid}" data-card-id="{item_id}">
           <div class="why-icon">{item.get('icon','✅')}</div>
-          <div class="why-title">{item.get('title','')}</div>
-          <div class="why-desc">{item.get('desc','')}</div>
+          {title_html}
+          {desc_html}
         </div>"""
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
     return f"""
     <div class="section">
-      <div class="section-title">{c.get('title','')}</div>
-      <div class="section-sub">{c.get('subtitle','')}</div>
+      {title_html}
+      {subtitle_html}
       <div class="why-grid">{cards}</div>
     </div>"""
 
 
-def _render_form(c: dict, color: str, color2: str) -> str:
+def _render_form(sid: str, c: dict, color: str, color2: str) -> str:
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    submit_label = c.get('submit_label', 'ثبت')
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block")
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block")
+    submit_html = _el(sid, f"{sid}-submit", "button", submit_label,
+                       f'<button class="form-submit" onclick="event.stopPropagation();window.__mockSubmit()">{submit_label}</button>', "ed-el-inline")
     return f"""
     <div class="section">
-      <div class="section-title">{c.get('title','')}</div>
-      <div class="section-sub">{c.get('subtitle','')}</div>
+      {title_html}
+      {subtitle_html}
       <div class="form-wrap">
         <div class="form-row"><label>نام</label><input type="text" placeholder="نام شما"></div>
         <div class="form-row"><label>شماره تماس</label><input type="text" placeholder="۰۹۱۲xxxxxxx"></div>
         <div class="form-row"><label>تاریخ و زمان</label><input type="text" placeholder="مثلاً امشب ساعت ۸"></div>
-        <button class="form-submit" onclick="event.stopPropagation();window.__mockSubmit()">{c.get('submit_label','ثبت')}</button>
+        {submit_html}
         <div class="confirm-box" id="confirmBox">✓ درخواست شما ثبت شد! به‌زودی با شما تماس می‌گیریم.</div>
       </div>
     </div>"""
 
 
-def _render_cta(c: dict, color: str, color2: str) -> str:
+def _render_cta(sid: str, c: dict, color: str, color2: str) -> str:
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    btn_label = c.get('button_label', '')
+    title_html = _el(sid, f"{sid}-title", "title", title, f'<h2>{title}</h2>', "ed-el-block")
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<p>{subtitle}</p>', "ed-el-block")
+    btn_html = _el(sid, f"{sid}-btn", "button", btn_label, f'<button class="btn-primary">{btn_label}</button>', "ed-el-inline")
     return f"""
     <div class="cta">
-      <h2>{c.get('title','')}</h2>
-      <p>{c.get('subtitle','')}</p>
-      <button class="btn-primary">{c.get('button_label','')}</button>
+      {title_html}
+      {subtitle_html}
+      {btn_html}
     </div>"""
 
 
-def _render_footer(c: dict, color: str, color2: str) -> str:
+def _render_footer(sid: str, c: dict, color: str, color2: str) -> str:
+    site_name = c.get('site_name', '')
+    tagline = c.get('tagline', '')
+    name_html = _el(sid, f"{sid}-name", "title", site_name, f'<div class="footer-logo">{site_name}</div>', "ed-el-inline")
+    tagline_html = _el(sid, f"{sid}-tagline", "text", tagline, f'<div>{tagline}</div>', "ed-el-inline")
     return f"""
     <footer>
-      <div class="footer-logo">{c.get('site_name','')}</div>
-      <div>{c.get('tagline','')}</div>
+      {name_html}
+      {tagline_html}
     </footer>"""
 
 
@@ -194,6 +297,22 @@ _RENDERERS = {
 }
 
 
+# ── Section-level human-readable labels (for the change panel title when
+#    the user clicks a whole section rather than one specific element) ──────
+
+SECTION_TYPE_LABEL_FA = {
+    "navbar": "هدر و منو",
+    "hero": "بخش اصلی سایت",
+    "menu_grid": "بخش منو",
+    "gallery": "گالری تصاویر",
+    "about": "بخش درباره ما",
+    "benefits": "بخش چرا ما را انتخاب کنید",
+    "form": "بخش تماس / رزرو",
+    "cta": "بخش دعوت به اقدام",
+    "footer": "فوتر",
+}
+
+
 # ── Shared CSS (parameterized by global style) ──────────────────────────────
 
 _BASE_CSS = """
@@ -201,8 +320,12 @@ _BASE_CSS = """
   html {{ scroll-behavior:smooth; }}
   body {{ font-family:{font}; background:#FBF7F0; color:#2D2424; direction:rtl; line-height:1.7; }}
 
-  .ed-section {{ position:relative; cursor:pointer; transition:outline .15s; }}
-  .ed-section:hover {{ outline:2px dashed {color}80; outline-offset:-2px; }}
+  .ed-section {{ position:relative; }}
+  .ed-el {{ cursor:pointer; transition:outline .12s, background-color .12s; border-radius:4px; }}
+  .ed-el-block {{ display:block; }}
+  .ed-el-inline {{ display:inline-block; }}
+  .ed-el:hover {{ outline:2px dashed {color}90; outline-offset:2px; background-color:{color}0d; }}
+  .ed-el.ed-selected {{ outline:3px solid {color} !important; outline-offset:2px; background-color:{color}1a; }}
 
   header {{ position:sticky; top:0; background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); box-shadow:0 1px 12px rgba(0,0,0,0.07); z-index:10; padding:16px 32px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }}
   .logo {{ font-weight:800; font-size:1.25rem; color:{color}; letter-spacing:.3px; }}
@@ -235,6 +358,7 @@ _BASE_CSS = """
   .about-icon {{ font-size:4rem; flex-shrink:0; width:90px; height:90px; background:linear-gradient(135deg,{color}1a,{color2}33); border-radius:50%; display:flex; align-items:center; justify-content:center; }}
   .about-title {{ font-weight:700; font-size:1.1rem; margin-bottom:8px; color:#2D2424; }}
   .about-text {{ flex:1; min-width:240px; color:#4a3f3a; font-size:0.94rem; }}
+  .about-body {{ display:block; }}
   .feature-list {{ list-style:none; margin-top:18px; }}
   .feature-list li {{ padding:7px 0; color:#4a3f3a; font-size:0.88rem; }}
 
@@ -260,22 +384,35 @@ _BASE_CSS = """
 
   footer {{ background:#241C1C; color:#a89b94; padding:32px 24px; text-align:center; font-size:0.82rem; }}
   footer .footer-logo {{ color:#fff; font-weight:700; margin-bottom:10px; font-size:1.05rem; }}
-
-  .ed-selected {{ outline:3px solid {color} !important; outline-offset:-3px; }}
 """
 
 _INTERACTION_JS = """
-window.__selectSection = function(id, ev) {
+window.__selectElement = function(el, ev) {
   if (ev) ev.stopPropagation();
-  document.querySelectorAll('.ed-section').forEach(el => el.classList.remove('ed-selected'));
-  const el = document.querySelector('[data-section-id="' + id + '"]');
-  if (el) el.classList.add('ed-selected');
+  document.querySelectorAll('.ed-selected').forEach(e => e.classList.remove('ed-selected'));
+  el.classList.add('ed-selected');
+  const sectionEl = el.closest('.ed-section');
+  const sectionId = sectionEl ? sectionEl.getAttribute('data-section-id') : null;
+  const sectionType = sectionEl ? sectionEl.getAttribute('data-section-type') : null;
   if (window.parent) {
-    window.parent.postMessage({ type: 'section-selected', sectionId: id }, '*');
+    window.parent.postMessage({
+      type: 'element-selected',
+      elementId: el.getAttribute('data-element-id'),
+      elementType: el.getAttribute('data-element-type'),
+      elementText: el.getAttribute('data-element-text'),
+      sectionId: sectionId,
+      sectionType: sectionType,
+    }, '*');
   }
 };
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.ed-el').forEach(function(el) {
+    el.addEventListener('click', function(ev) { window.__selectElement(el, ev); });
+  });
+});
 window.__mockSubmit = function() {
   const box = document.getElementById('confirmBox');
   if (box) box.style.display = 'block';
 };
 """
+
