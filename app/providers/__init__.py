@@ -1,1 +1,1 @@
-# Provider packages — PM, Builder, Reviewer
+inspiration/__init__.py
