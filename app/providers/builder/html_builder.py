@@ -1,5 +1,6 @@
 """
-HTML Builder — Builder v1 (Rich Edition) + Section Editor Model (v3).
+HTML Builder — Builder v1 (Rich Edition) + Section Editor Model (v3)
++ Inspiration Bank integration (v6).
 
 Generates a real, visually rich HTML/CSS preview for each product type.
 Scenario-aware: full landing pages with hero, menu/courses, gallery, contact, footer.
@@ -9,11 +10,19 @@ v3 adds a structured, editable section-block model (see section_model.py /
 render_sections.py) so the frontend can offer click-to-edit, reorder,
 duplicate, hide, and delete on individual sections — without regenerating
 from scratch each time.
+
+v6 adds Inspiration Bank integration for cafe websites: instead of always
+producing the same layout for "cafe_intro" etc., a design family is
+selected from app/inspiration based on the user's raw request text, and
+its color_palette + section_structure are layered onto the base spec —
+so two cafe requests with different intents (e.g. "لوکس" vs "رزرو میز")
+produce genuinely different layouts, not just different colors.
 """
 from __future__ import annotations
 from typing import Any
 from app.providers.builder.section_model import build_sections_from_spec
 from app.providers.builder.render_sections import render_website
+from app.inspiration.selector import pick_default_reference
 
 
 def generate(
@@ -30,7 +39,8 @@ def generate(
         or "general"
     )
 
-    spec = _build_spec(scenario, understanding, website_intent)
+    raw_text = understanding.get("raw_text") or " ".join(understanding.get("bullets", []) or [])
+    spec = _build_spec(scenario, understanding, website_intent, raw_text)
 
     # New editable section-block model — single source of truth going forward
     sections = build_sections_from_spec(spec)
@@ -56,6 +66,8 @@ def generate(
             # New editable model — frontend uses this for click-to-edit
             "section_blocks": sections,
             "global_style": global_style,
+            # Customer-facing only (Persian name) — never expose reference_id/scores
+            "inspiration_style_name": spec.get("_inspiration_style_name"),
         },
         "change_summary": [
             f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
@@ -71,7 +83,13 @@ def generate(
 
 # ── Spec builder ───────────────────────────────────────────────────────────────
 
-def _build_spec(scenario: str, und: dict, website_intent: str | None = None) -> dict:
+_CAFE_INTENTS = {
+    "cafe_intro", "cafe_reservation", "cafe_ordering", "coffee_ecommerce", "cafe_hybrid",
+}
+
+
+def _build_spec(scenario: str, und: dict, website_intent: str | None = None,
+                 raw_text: str = "") -> dict:
     domain = und.get("business_domain") or ""
     # Fallback: some keyword signal may live in bullets when business_domain is absent (mock path)
     signal_text = domain + " " + " ".join(und.get("bullets", []) or [])
@@ -103,10 +121,55 @@ def _build_spec(scenario: str, und: dict, website_intent: str | None = None) -> 
         }
         spec = SPECS.get(scenario, _general_spec())
 
+    # ── Inspiration Bank: for cafe intents, layer a design family's color
+    # palette and section order on top of the base spec, so layout
+    # actually varies with user intent (not just colors/icons). ──────────
+    if intent in _CAFE_INTENTS:
+        spec = _apply_cafe_inspiration(spec, raw_text or signal_text)
+
     if domain and len(domain) <= 24:
         spec["name"] = domain
 
     return spec
+
+
+def _apply_cafe_inspiration(spec: dict, intent_text: str) -> dict:
+    """
+    Picks a cafe design family from the Inspiration Bank based on the
+    user's raw request text, then layers its color palette and section
+    ordering onto the existing intent-based spec. Never overwrites
+    content (menu items, name, tagline) — only visual/structural fields,
+    so editability and correctness from earlier sprints are preserved.
+    """
+    ref = pick_default_reference("cafe", intent_text)
+    if ref is None:
+        return spec
+
+    palette = ref.color_palette or {}
+    if palette.get("primary"):
+        spec["color"] = palette["primary"]
+    if palette.get("secondary") or palette.get("accent"):
+        spec["color2"] = palette.get("secondary") or palette.get("accent")
+
+    # Reorder nav_items to roughly follow the family's section_structure
+    # (only reordering items that already exist in the spec — never
+    # inventing nav entries that have no matching section).
+    nav_map = {
+        "menu_grid": "منو", "gallery": "گالری", "about": "درباره ما",
+        "form": "رزرو میز" if "رزرو" in spec.get("hero_btn", "") else "تماس",
+        "benefits": "چرا ما", "footer": None, "navbar": None, "hero": "خانه",
+    }
+    desired_order = [nav_map[s] for s in ref.section_structure if nav_map.get(s)]
+    existing_nav = spec.get("nav_items", [])
+    reordered = [n for n in desired_order if n in existing_nav]
+    remaining = [n for n in existing_nav if n not in reordered]
+    if reordered:
+        spec["nav_items"] = reordered + remaining
+
+    # Customer-facing label only — never the technical reference_id
+    spec["_inspiration_style_name"] = ref.reference_name
+    return spec
+
 
 
 def _scenario_to_intent(scenario: str) -> str:
