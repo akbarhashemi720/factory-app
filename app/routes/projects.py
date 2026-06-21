@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -568,6 +567,25 @@ def generate_preview_endpoint(project_id: UUID, x_customer_id: Optional[str] = H
         )
     understanding = und_result.data[0]
 
+    # Best-effort: include the original raw request text so the builder's
+    # Inspiration Bank selector can match intent keywords ("لوکس", "رزرو
+    # میز", ...) against what the user actually typed, not just the
+    # detected scenario. Never blocks the build if this lookup fails.
+    if not understanding.get("raw_text"):
+        try:
+            req_result = (
+                db.table("requests")
+                .select("raw_text")
+                .eq("project_id", str(project_id))
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if req_result.data:
+                understanding["raw_text"] = req_result.data[0]["raw_text"]
+        except Exception:
+            pass
+
     # ── Builder ───────────────────────────────────────────────────────────────
     _update_project(db, project_id, {"status": "building"})
 
@@ -1070,23 +1088,24 @@ def edit_direct(project_id: UUID, body: DirectEditRequest,
 
     # 2. Per-element style overrides (color / size / icon) — deterministic,
     #    rendered directly by render_sections.py without any AI step.
-    #    Text color ("رنگ نوشته") and size apply to the specific element
-    #    itself. Background color ("رنگ زمینه") on a CARD sub-element
-    #    (card_title/card_desc/card_price) must color the whole visible
-    #    card, not a thin strip behind the text — so it's stored under
-    #    the item's own key (item_id), matching render_sections.py's
-    #    _card_bg_style_attr lookup.
+    #    Text color ("رنگ نوشته") and size always apply to the exact
+    #    clicked element. Background color ("رنگ زمینه") respects
+    #    target_layer — the user's explicit choice of "خود آیکون" /
+    #    "باکس تصویر" / "کارت" — so the same control can mean three
+    #    different things depending on which layer they picked.
     if body.selected_element_id and (body.color or body.size or body.icon or body.background_color):
         if body.color:
             sections = apply_element_style_edit(sections, sid, body.selected_element_id, "color", body.color)
             applied_anything = True
         if body.background_color:
-            is_card_subelement = body.item_index is not None and re.search(r"-item-\d+-", body.selected_element_id or "")
-            if is_card_subelement:
-                item_key = re.sub(r"(-item-\d+)-.*$", r"\1", body.selected_element_id)
-                sections = apply_element_style_edit(sections, sid, item_key, "background_color", body.background_color)
+            target_layer = body.target_layer or "element"
+            if target_layer == "card" and body.selected_card_id:
+                bg_key = body.selected_card_id
+            elif target_layer == "box" and body.selected_box_id:
+                bg_key = body.selected_box_id
             else:
-                sections = apply_element_style_edit(sections, sid, body.selected_element_id, "background_color", body.background_color)
+                bg_key = body.selected_element_id
+            sections = apply_element_style_edit(sections, sid, bg_key, "background_color", body.background_color)
             applied_anything = True
         if body.size:
             sections = apply_element_style_edit(sections, sid, body.selected_element_id, "size", body.size)
