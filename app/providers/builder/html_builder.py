@@ -1,6 +1,6 @@
 """
 HTML Builder — Builder v1 (Rich Edition) + Section Editor Model (v3)
-+ Inspiration Bank integration (v6).
++ Inspiration Bank integration (v7 — real visual diversity).
 
 Generates a real, visually rich HTML/CSS preview for each product type.
 Scenario-aware: full landing pages with hero, menu/courses, gallery, contact, footer.
@@ -11,16 +11,19 @@ render_sections.py) so the frontend can offer click-to-edit, reorder,
 duplicate, hide, and delete on individual sections — without regenerating
 from scratch each time.
 
-v6 adds Inspiration Bank integration for cafe websites: instead of always
-producing the same layout for "cafe_intro" etc., a design family is
-selected from app/inspiration based on the user's raw request text, and
-its color_palette + section_structure are layered onto the base spec —
-so two cafe requests with different intents (e.g. "لوکس" vs "رزرو میز")
-produce genuinely different layouts, not just different colors.
+v6 added Inspiration Bank integration for cafe websites: a design family
+is selected from app/inspiration based on the user's raw request text.
+
+v7 makes that selection actually change the RENDERED OUTPUT, not just
+colors/nav order: when the chosen family's visual_style is
+"luxury_premium", the website is built with a structurally different
+section order (build_luxury_cafe_sections) and rendered with a dark
+editorial CSS theme (render_sections.py's theme="luxury"), instead of
+reusing the generic warm-cafe layout with different colors.
 """
 from __future__ import annotations
 from typing import Any
-from app.providers.builder.section_model import build_sections_from_spec
+from app.providers.builder.section_model import build_sections_from_spec, build_luxury_cafe_sections
 from app.providers.builder.render_sections import render_website
 from app.inspiration.selector import pick_default_reference
 
@@ -42,13 +45,21 @@ def generate(
     raw_text = understanding.get("raw_text") or " ".join(understanding.get("bullets", []) or [])
     spec = _build_spec(scenario, understanding, website_intent, raw_text)
 
-    # New editable section-block model — single source of truth going forward
-    sections = build_sections_from_spec(spec)
+    # New editable section-block model — single source of truth going forward.
+    # For cafe_luxury_premium specifically, use a STRUCTURALLY different
+    # section order (signature experience + ambience instead of generic
+    # gallery/about), not just the default order with luxury colors.
+    if spec.get("_inspiration_visual_style") == "luxury_premium":
+        sections = build_luxury_cafe_sections(spec)
+    else:
+        sections = build_sections_from_spec(spec)
+
     global_style = {
         "primary_color": spec.get("color", "#4F46E5"),
         "secondary_color": spec.get("color2", "#818CF8"),
         "border_radius": "14px",
         "font_family": "Tahoma,Arial,sans-serif",
+        "theme": "luxury" if spec.get("_inspiration_visual_style") == "luxury_premium" else "default",
     }
     html = render_website(sections, global_style)
 
@@ -168,6 +179,7 @@ def _apply_cafe_inspiration(spec: dict, intent_text: str) -> dict:
 
     # Customer-facing label only — never the technical reference_id
     spec["_inspiration_style_name"] = ref.reference_name
+    spec["_inspiration_visual_style"] = ref.visual_style
     return spec
 
 
