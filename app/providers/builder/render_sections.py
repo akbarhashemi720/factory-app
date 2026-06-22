@@ -35,6 +35,11 @@ def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any])
     color2 = global_style.get("secondary_color", "#818CF8")
     radius = global_style.get("border_radius", "14px")
     font = global_style.get("font_family", "Tahoma,Arial,sans-serif")
+    # theme switches between the default warm-cafe visual system and a
+    # dark/editorial luxury system — a REAL visual transformation (dark
+    # palette, large whitespace, refined typography, cinematic hero),
+    # not just a color swap on the same generic layout.
+    theme = global_style.get("theme", "default")
 
     body_html = ""
     for sec in sections:
@@ -53,16 +58,20 @@ def render_website(sections: list[dict[str, Any]], global_style: dict[str, Any])
             f'{section_html}</div>'
         )
 
+    css = _BASE_CSS.format(color=color, color2=color2, radius=radius, font=font)
+    if theme == "luxury":
+        css += _LUXURY_CSS_OVERRIDE.format(color=color, color2=color2, radius=radius)
+
     return f"""<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-{_BASE_CSS.format(color=color, color2=color2, radius=radius, font=font)}
+{css}
 </style>
 </head>
-<body>
+<body class="{'theme-luxury' if theme == 'luxury' else ''}">
 {body_html}
 <script>
 {_INTERACTION_JS}
@@ -144,15 +153,24 @@ def _element_style_attr(overrides: dict[str, Any], element_id: str, element_type
 # color/size edits from the Contextual Edit Panel are applied on render.
 
 def _el(section_id: str, element_id: str, element_type: str, text: Any, inner_html: str,
-        extra_class: str = "", overrides: dict[str, Any] | None = None) -> str:
-    """Wrap a piece of inner HTML as a clickable, selectable element."""
+        extra_class: str = "", overrides: dict[str, Any] | None = None, item_id: str | None = None) -> str:
+    """
+    Wrap a piece of inner HTML as a clickable, selectable element.
+
+    item_id (optional): if this element lives inside a card/item (e.g. a
+    menu card, a benefit card), this is the card's own override key —
+    exposed as data-card-id so the frontend can offer a layer choice
+    ("خود آیکون" / "باکس تصویر" / "کارت") instead of only ever selecting
+    the exact clicked element.
+    """
     style_attr = _element_style_attr(overrides or {}, element_id, element_type)
+    card_attr = f' data-card-id="{item_id}"' if item_id else ""
     return (
         f'<span class="ed-el {extra_class}" '
         f'data-section-id="{section_id}" '
         f'data-element-id="{element_id}" '
         f'data-element-type="{element_type}" '
-        f'data-element-text="{_esc(text)}"{style_attr}>{inner_html}</span>'
+        f'data-element-text="{_esc(text)}"{card_attr}{style_attr}>{inner_html}</span>'
     )
 
 
@@ -209,15 +227,22 @@ def _render_menu_grid(sid: str, c: dict, color: str, color2: str, overrides: dic
         desc = item.get('desc', '')
         price = item.get('price', '')
 
-        name_html = _el(sid, f"{item_id}-name", "card_title", name, f'<div class="m-name">{name}</div>', "ed-el-block", overrides)
-        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="m-desc">{desc}</div>', "ed-el-block", overrides)
+        name_html = _el(sid, f"{item_id}-name", "card_title", name, f'<div class="m-name">{name}</div>', "ed-el-block", overrides, item_id)
+        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="m-desc">{desc}</div>', "ed-el-block", overrides, item_id)
         price_html = ""
         if price:
-            price_html = _el(sid, f"{item_id}-price", "card_price", price, f'<div class="m-price">{price}</div>', "ed-el-block", overrides)
+            price_html = _el(sid, f"{item_id}-price", "card_price", price, f'<div class="m-price">{price}</div>', "ed-el-block", overrides, item_id)
+        # The image/icon has its own layer hierarchy: the icon itself
+        # (element_id), the box behind it ("{item_id}-imgbox"), and the
+        # whole card (item_id). data-card-id + data-box-id expose this
+        # so the frontend can offer "آیکون / باکس تصویر / کارت" choices.
+        img_box_id = f"{item_id}-imgbox"
+        img_box_style = _element_style_attr(overrides, img_box_id, "image_box")
         img_html = _el(sid, f"{item_id}-img", "image", item.get('icon', '✨'),
-                        f'<div class="m-img">{item.get("icon","✨")}</div>', "ed-el-block", overrides)
+                        f'<div class="m-img"{img_box_style} data-box-id="{img_box_id}">{item.get("icon","✨")}</div>',
+                        "ed-el-block", overrides, item_id)
         btn_html = _el(sid, f"{item_id}-btn", "button", "انتخاب",
-                        '<button class="m-btn">انتخاب</button>', "ed-el-inline", overrides)
+                        '<button class="m-btn">انتخاب</button>', "ed-el-inline", overrides, item_id)
 
         # "رنگ زمینه" on a card title/desc must color the whole VISIBLE
         # card container (.m-card), not just a thin strip behind the text
@@ -293,12 +318,17 @@ def _render_benefits(sid: str, c: dict, color: str, color2: str, overrides: dict
         item_id = f"{sid}-item-{idx}"
         title = item.get('title', '')
         desc = item.get('desc', '')
-        title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="why-title">{title}</div>', "ed-el-block", overrides)
-        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="why-desc">{desc}</div>', "ed-el-block", overrides)
+        title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="why-title">{title}</div>', "ed-el-block", overrides, item_id)
+        desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="why-desc">{desc}</div>', "ed-el-block", overrides, item_id)
+        icon_box_id = f"{item_id}-iconbox"
+        icon_box_style = _element_style_attr(overrides, icon_box_id, "image_box")
+        icon_html = _el(sid, f"{item_id}-icon", "image", item.get('icon', '✅'),
+                         f'<div class="why-icon"{icon_box_style} data-box-id="{icon_box_id}">{item.get("icon","✅")}</div>',
+                         "ed-el-block", overrides, item_id)
         card_bg = _card_bg_style_attr(overrides, item_id)
         cards += f"""
         <div class="why-card" data-section-id="{sid}" data-card-id="{item_id}"{card_bg}>
-          <div class="why-icon">{item.get('icon','✅')}</div>
+          {icon_html}
           {title_html}
           {desc_html}
         </div>"""
@@ -363,6 +393,71 @@ def _render_footer(sid: str, c: dict, color: str, color2: str, overrides: dict, 
     </footer>"""
 
 
+def _render_signature_experience(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
+    """
+    Luxury-only section: an editorial "signature experience" block — a
+    large visual on one side, an eyebrow label + title + description on
+    the other. Used by cafe_luxury_premium right after the hero, in place
+    of jumping straight into a generic menu grid.
+    Still exposes the full icon/box/card editable hierarchy: the visual
+    box is its own card (item_id), with the icon/image inside it.
+    """
+    item_id = f"{sid}-signature"
+    eyebrow = c.get('eyebrow', '')
+    title = c.get('title', '')
+    desc = c.get('desc', '')
+    icon = c.get('icon', '☕')
+
+    eyebrow_html = _el(sid, f"{item_id}-eyebrow", "subtitle", eyebrow, f'<span class="signature-eyebrow">{eyebrow}</span>', "ed-el-block", overrides, item_id)
+    title_html = _el(sid, f"{item_id}-title", "card_title", title, f'<div class="signature-title">{title}</div>', "ed-el-block", overrides, item_id)
+    desc_html = _el(sid, f"{item_id}-desc", "card_desc", desc, f'<div class="signature-desc">{desc}</div>', "ed-el-block", overrides, item_id)
+
+    box_id = f"{item_id}-imgbox"
+    box_style = _element_style_attr(overrides, box_id, "image_box")
+    visual_html = _el(sid, f"{item_id}-img", "image", icon,
+                       f'<div class="signature-visual"{box_style} data-box-id="{box_id}">{icon}</div>',
+                       "ed-el-block", overrides, item_id)
+
+    card_bg = _card_bg_style_attr(overrides, item_id)
+    return f"""
+    <div class="section"{_bg_style_attr(section_bg)}>
+      <div class="signature-wrap" data-card-id="{item_id}"{card_bg}>
+        {visual_html}
+        <div class="signature-text">
+          {eyebrow_html}
+          {title_html}
+          {desc_html}
+        </div>
+      </div>
+    </div>"""
+
+
+def _render_ambience(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
+    """
+    Luxury-only section: an asymmetric photo-mosaic "ambience" gallery —
+    visually distinct from the plain even-grid .gallery-grid used by the
+    default theme. Each tile is independently selectable/editable.
+    """
+    title = c.get('title', '')
+    subtitle = c.get('subtitle', '')
+    n = c.get("item_count", 4)
+    items = ""
+    for i in range(n):
+        box_id = f"{sid}-amb-{i}"
+        box_style = _element_style_attr(overrides, box_id, "image_box")
+        items += _el(sid, box_id, "image", "تصویر فضا",
+                      f'<div class="ambience-item"{box_style} data-box-id="{box_id}">📷</div>',
+                      "ed-el-block", overrides)
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
+    return f"""
+    <div class="section"{_bg_style_attr(section_bg)}>
+      {title_html}
+      {subtitle_html}
+      <div class="ambience-grid">{items}</div>
+    </div>"""
+
+
 _RENDERERS = {
     "navbar": _render_navbar,
     "hero": _render_hero,
@@ -373,6 +468,8 @@ _RENDERERS = {
     "form": _render_form,
     "cta": _render_cta,
     "footer": _render_footer,
+    "signature_experience": _render_signature_experience,
+    "ambience": _render_ambience,
 }
 
 
@@ -389,6 +486,8 @@ SECTION_TYPE_LABEL_FA = {
     "form": "بخش تماس / رزرو",
     "cta": "بخش دعوت به اقدام",
     "footer": "فوتر",
+    "signature_experience": "بخش تجربه ویژه",
+    "ambience": "بخش فضای کافه",
 }
 
 
@@ -465,6 +564,83 @@ _BASE_CSS = """
   footer .footer-logo {{ color:#fff; font-weight:700; margin-bottom:10px; font-size:1.05rem; }}
 """
 
+# ── Luxury theme override (cafe_luxury_premium) ─────────────────────────────
+# A REAL visual transformation on top of _BASE_CSS — dark espresso/black
+# background, warm gold accents, large whitespace, editorial serif-leaning
+# typography, refined/fewer cards, cinematic full-bleed hero. Appended
+# after _BASE_CSS so unstyled new section types (ambience,
+# signature_experience) still inherit sane defaults, while everything
+# listed here visibly overrides the warm-cafe defaults.
+_LUXURY_CSS_OVERRIDE = """
+  body.theme-luxury {{ background:#0F0D0C; color:#EDE6DD; font-family:'Georgia','Tahoma',serif; letter-spacing:.2px; }}
+
+  body.theme-luxury header {{ background:rgba(15,13,12,0.92); backdrop-filter:blur(10px); box-shadow:none; border-bottom:1px solid rgba(212,175,116,0.18); padding:22px 40px; }}
+  body.theme-luxury .logo {{ color:{color2}; font-family:'Georgia',serif; font-size:1.4rem; letter-spacing:1px; }}
+  body.theme-luxury .nav-link {{ color:#C9BCA8; font-size:.82rem; letter-spacing:.5px; }}
+
+  body.theme-luxury .hero {{
+    background:linear-gradient(180deg, rgba(15,13,12,.55) 0%, rgba(15,13,12,.85) 65%, #0F0D0C 100%), radial-gradient(circle at 50% 20%, {color}33 0%, transparent 60%);
+    padding:160px 24px 150px; color:#F4EDE3;
+  }}
+  body.theme-luxury .hero-badge {{ background:transparent; border:1px solid {color2}; color:{color2}; letter-spacing:2px; font-size:.7rem; text-transform:uppercase; padding:7px 22px; }}
+  body.theme-luxury .hero h1 {{ font-family:'Georgia',serif; font-size:3.4rem; font-weight:400; letter-spacing:1px; text-shadow:none; line-height:1.3; }}
+  body.theme-luxury .hero p {{ font-size:1.05rem; color:#C9BCA8; max-width:480px; margin:0 auto 40px; opacity:1; }}
+  body.theme-luxury .btn-primary {{ background:{color2}; color:#0F0D0C; border-radius:2px; padding:16px 42px; font-weight:600; letter-spacing:1px; box-shadow:none; }}
+  body.theme-luxury .btn-secondary {{ background:transparent; border:1px solid #C9BCA8; color:#F4EDE3; border-radius:2px; padding:14px 38px; letter-spacing:1px; }}
+  body.theme-luxury .hero-wave {{ display:none; }}
+
+  body.theme-luxury .section {{ padding:110px 28px; max-width:1180px; }}
+  body.theme-luxury .section-title {{ font-family:'Georgia',serif; font-weight:400; font-size:2.1rem; letter-spacing:.5px; color:#F4EDE3; margin-bottom:18px; }}
+  body.theme-luxury .section-sub {{ color:#8C7F6E; font-size:.88rem; margin-bottom:64px; }}
+
+  body.theme-luxury .menu-grid {{ gap:36px; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); }}
+  body.theme-luxury .m-card {{ background:#1A1614; border:1px solid rgba(212,175,116,0.15); border-radius:2px; box-shadow:none; transition:border-color .2s; }}
+  body.theme-luxury .m-img {{ height:140px; background:linear-gradient(135deg,{color}22,{color2}22); font-size:3rem; }}
+  body.theme-luxury .m-card-body {{ padding:32px 26px; }}
+  body.theme-luxury .m-name {{ font-family:'Georgia',serif; font-weight:400; font-size:1.15rem; color:#F4EDE3; }}
+  body.theme-luxury .m-desc {{ color:#8C7F6E; font-size:.84rem; }}
+  body.theme-luxury .m-price {{ color:{color2}; font-weight:400; font-family:'Georgia',serif; font-size:1.05rem; }}
+  body.theme-luxury .m-btn {{ background:transparent; border:1px solid {color2}; color:{color2}; border-radius:2px; letter-spacing:.5px; }}
+
+  body.theme-luxury .about-wrap {{ background:#1A1614; border:1px solid rgba(212,175,116,0.15); border-radius:2px; padding:56px; }}
+  body.theme-luxury .about-icon {{ background:transparent; border:1px solid {color2}55; }}
+  body.theme-luxury .about-title {{ font-family:'Georgia',serif; color:#F4EDE3; font-size:1.3rem; }}
+  body.theme-luxury .about-text {{ color:#B8AB98; }}
+  body.theme-luxury .feature-list li {{ color:#B8AB98; }}
+
+  body.theme-luxury .why-grid {{ gap:48px; }}
+  body.theme-luxury .why-card {{ background:transparent; box-shadow:none; border-top:1px solid rgba(212,175,116,0.25); padding-top:32px; }}
+  body.theme-luxury .why-title {{ font-family:'Georgia',serif; color:#F4EDE3; }}
+  body.theme-luxury .why-desc {{ color:#8C7F6E; }}
+
+  body.theme-luxury .gallery-grid {{ gap:8px; }}
+  body.theme-luxury .gallery-item {{ border-radius:2px; background:linear-gradient(135deg,{color}2a,{color2}2a); box-shadow:none; aspect-ratio:3/4; }}
+
+  body.theme-luxury .form-wrap {{ background:#1A1614; border:1px solid rgba(212,175,116,0.2); border-radius:2px; box-shadow:none; }}
+  body.theme-luxury .form-row input {{ background:#0F0D0C; border:1px solid rgba(212,175,116,0.25); color:#F4EDE3; border-radius:2px; }}
+  body.theme-luxury .form-submit {{ background:{color2}; color:#0F0D0C; border-radius:2px; letter-spacing:1px; }}
+
+  body.theme-luxury .cta {{ background:#1A1614; border-top:1px solid rgba(212,175,116,0.2); border-bottom:1px solid rgba(212,175,116,0.2); padding:96px 24px; }}
+  body.theme-luxury .cta h2 {{ font-family:'Georgia',serif; font-weight:400; font-size:1.9rem; }}
+  body.theme-luxury .cta p {{ color:#8C7F6E; }}
+
+  body.theme-luxury footer {{ background:#0F0D0C; color:#6B6259; border-top:1px solid rgba(212,175,116,0.15); padding:48px 24px; }}
+  body.theme-luxury footer .footer-logo {{ color:{color2}; font-family:'Georgia',serif; }}
+
+  /* New luxury-only sections */
+  body.theme-luxury .signature-wrap {{ display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center; }}
+  body.theme-luxury .signature-visual {{ aspect-ratio:4/5; background:linear-gradient(135deg,{color}2a,{color2}2a); border-radius:2px; display:flex; align-items:center; justify-content:center; font-size:3.5rem; }}
+  body.theme-luxury .signature-text {{ }}
+  body.theme-luxury .signature-eyebrow {{ color:{color2}; font-size:.75rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px; display:block; }}
+  body.theme-luxury .signature-title {{ font-family:'Georgia',serif; font-size:2rem; font-weight:400; color:#F4EDE3; margin-bottom:18px; }}
+  body.theme-luxury .signature-desc {{ color:#B8AB98; line-height:1.9; font-size:.95rem; }}
+  @media (max-width:760px) {{ body.theme-luxury .signature-wrap {{ grid-template-columns:1fr; }} }}
+
+  body.theme-luxury .ambience-grid {{ display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:10px; grid-auto-rows:160px; }}
+  body.theme-luxury .ambience-item {{ background:linear-gradient(135deg,{color}26,{color2}26); border-radius:2px; display:flex; align-items:center; justify-content:center; font-size:2.2rem; }}
+  body.theme-luxury .ambience-item:first-child {{ grid-row:span 2; }}
+"""
+
 _INTERACTION_JS = """
 window.__selectElement = function(el, ev) {
   if (ev) ev.stopPropagation();
@@ -473,12 +649,22 @@ window.__selectElement = function(el, ev) {
   const sectionEl = el.closest('.ed-section');
   const sectionId = sectionEl ? sectionEl.getAttribute('data-section-id') : null;
   const sectionType = sectionEl ? sectionEl.getAttribute('data-section-type') : null;
+  // Layer hierarchy: the exact clicked element may sit inside a "box"
+  // (e.g. the colored square behind an icon) which itself sits inside a
+  // card. Both ids are exposed so the user can choose which layer they
+  // actually meant — "خود آیکون" / "باکس تصویر" / "کارت" — instead of
+  // only ever editing the exact element under the cursor.
+  const boxEl = ev && ev.target ? ev.target.closest('[data-box-id]') : null;
+  const boxId = boxEl ? boxEl.getAttribute('data-box-id') : null;
+  const cardId = el.getAttribute('data-card-id');
   if (window.parent) {
     window.parent.postMessage({
       type: 'element-selected',
       elementId: el.getAttribute('data-element-id'),
       elementType: el.getAttribute('data-element-type'),
       elementText: el.getAttribute('data-element-text'),
+      boxId: boxId,
+      cardId: cardId,
       sectionId: sectionId,
       sectionType: sectionType,
     }, '*');
@@ -492,6 +678,8 @@ window.__selectSectionBackground = function(sectionEl) {
       elementId: null,
       elementType: null,
       elementText: null,
+      boxId: null,
+      cardId: null,
       sectionId: sectionEl.getAttribute('data-section-id'),
       sectionType: sectionEl.getAttribute('data-section-type'),
     }, '*');
