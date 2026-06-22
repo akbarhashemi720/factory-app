@@ -156,6 +156,74 @@ def build_sections_from_spec(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return sections
 
 
+def build_luxury_cafe_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Dedicated section order for cafe_luxury_premium — STRUCTURALLY
+    different from build_sections_from_spec, not just a recolor:
+
+      1. Premium navbar
+      2. Dark editorial hero
+      3. Signature experience / tasting section   (new section type)
+      4. Elegant menu preview (fewer, richer cards)
+      5. Ambience/gallery section                  (new section type)
+      6. Reservation CTA
+      7. Location/contact footer
+
+    Still produces the same editable section-block model — every block
+    still has id/type/visible/content/style — so the contextual editor
+    (icon/box/card/section layers, separate text vs background color)
+    keeps working exactly as it does for the default theme.
+    """
+    sections: list[dict[str, Any]] = []
+
+    sections.append(new_block("navbar", {
+        "logo_text": spec.get("name", "کافه"),
+        "nav_items": spec.get("nav_items", []),
+    }))
+
+    sections.append(new_block("hero", {
+        "badge": "تجربه‌ای متفاوت از قهوه",
+        "title": spec.get("name", "کافه"),
+        "subtitle": spec.get("tagline", ""),
+        "primary_button": spec.get("hero_btn", "رزرو میز"),
+        "secondary_button": spec.get("hero_btn2", "مشاهده منو"),
+    }))
+
+    sections.append(new_block("signature_experience", {
+        "eyebrow": "تجربه ویژه",
+        "title": "هنر قهوه، با تمام جزئیات",
+        "desc": spec.get("about") or "هر فنجان با دقت، با دانه‌های منتخب و دستان مجرب باریستاهای ما آماده می‌شود — تجربه‌ای آرام و خاص که فقط در یک بازدید قابل درک است.",
+        "icon": "☕",
+    }))
+
+    if spec.get("menu_items"):
+        # Fewer, more elegant cards — luxury feels curated, not exhaustive.
+        sections.append(new_block("menu_grid", {
+            "title": "منتخب منو",
+            "subtitle": "نمونه‌ای از پیشنهادهای ویژه ما",
+            "items": (spec.get("menu_items") or [])[:4],
+        }))
+
+    sections.append(new_block("ambience", {
+        "title": "فضای کافه",
+        "subtitle": "اتمسفری که برایش طراحی شده",
+        "item_count": 4,
+    }))
+
+    sections.append(new_block("cta", {
+        "title": "میزی برای شما رزرو شده است",
+        "subtitle": "برای رزرو میز یا اطلاعات بیشتر درباره تجربه ما، با ما در ارتباط باشید",
+        "button_label": "رزرو میز",
+    }))
+
+    sections.append(new_block("footer", {
+        "site_name": spec.get("name", "کافه"),
+        "tagline": "یک تجربه قهوه برتر",
+    }))
+
+    return sections
+
+
 def apply_section_edit(sections: list[dict[str, Any]], section_id: str,
                         field_key: str, new_value: Any) -> list[dict[str, Any]]:
     """Update one content field on one section, return the new sections list."""
