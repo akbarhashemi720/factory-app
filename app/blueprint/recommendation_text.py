@@ -1,8 +1,9 @@
 """
-Recommendation wording — Puzzle 6.6 (AI Factory v2 user-facing step).
+Recommendation wording — Puzzle 6.6 (AI Factory v2 user-facing step),
+polished in Puzzle 6.7 to feel more human and less mechanical.
 
 Converts a ProductBlueprint (from app.blueprint.generator) into the
-simple, human-readable Persian fields needed for the "پیشنهاد کارخانه"
+simple, human-readable Persian fields needed for the "پیشنهاد راه‌حل"
 confirmation step shown to normal users.
 
 This module is deliberately separate from app/blueprint/generator.py —
@@ -35,11 +36,32 @@ _NON_WEBSITE_OUTPUT_MARKERS = (
 # generic translation attempt (just showing the Persian "خروجی پیشنهادی"
 # wrapper) when a phrase isn't in this table yet — never raw English.
 _OUTPUT_LABELS_FA: dict[str, str] = {
-    "product catalog + order page": "کاتالوگ محصول و صفحه سفارش ساده",
+    "product catalog + order page": "یک کاتالوگ محصول همراه با صفحه سفارش ساده",
     "portfolio page + customer request form": "صفحه نمونه‌کار و فرم درخواست سفارش",
     "service listing + simple booking form": "لیست خدمات و فرم ساده رزرو نوبت",
     "simple financial dashboard": "داشبورد مالی ساده",
     "simple task dashboard": "داشبورد ساده وظایف",
+}
+
+# Per-industry human, conversational templates — written the way a person
+# would actually talk, not a mechanical "با توجه به اینکه..." sentence.
+# Only covers industries with a clear, natural phrasing the puzzle asked
+# for; anything else falls back to the generic (but still human) template
+# in build_recommendation_text below.
+_HUMAN_UNDERSTOOD_FA: dict[str, str] = {
+    "homemade_food_products": "فهمیدم می‌خواهی ترشی‌های خانگی‌ات را بفروشی.",
+    "tailoring_fashion": "فهمیدم می‌خواهی برای خیاطی‌ات مشتری بیشتری جذب کنی.",
+    "beauty_appointments": "فهمیدم می‌خواهی مشتری‌ها راحت‌تر نوبت بگیرند.",
+    "small_finance_accounting": "فهمیدم می‌خواهی حساب‌های مالی‌ات را در یک صفحه ساده ببینی.",
+    "office_task_management": "فهمیدم می‌خواهی کارهای روزانه تیمت را بهتر مدیریت کنی.",
+}
+
+_HUMAN_REASON_FA: dict[str, str] = {
+    "homemade_food_products": "برای شروع، بهتر است مشتری‌ها بتوانند محصولات، قیمت‌ها و راه سفارش را سریع ببینند.",
+    "tailoring_fashion": "برای شروع، بهتر است مشتری‌ها اول نمونه‌کارهایت را ببینند و بعد بتوانند راحت سفارش بدهند.",
+    "beauty_appointments": "برای شروع، بهتر است مشتری‌ها خدمات و قیمت‌ها را ببینند و بدون تماس تلفنی نوبت بگیرند.",
+    "small_finance_accounting": "برای شروع، یک نمای ساده از درآمد و هزینه کافی است — نه یک نرم‌افزار کامل حسابداری.",
+    "office_task_management": "برای شروع، یک نمای ساده از وظایف و مسئول هرکدام کافی است.",
 }
 
 
@@ -63,31 +85,34 @@ def build_recommendation_text(bp: ProductBlueprint) -> dict[str, str]:
     not_recommended_note (or None).
     """
     output_label = _output_label_fa(bp.first_output_type)
+    industry = bp.industry_category or ""
 
-    # 1. What we understood — built from problem_to_solve/user_type when
-    #    available, with an honest, low-confidence-friendly fallback otherwise.
-    if bp.user_type and bp.problem_to_solve and bp.confidence_level != "low":
-        first_problem = bp.problem_to_solve.split("؛")[0]
-        understood_summary = (
-            f"فهمیدم می‌خواهی به‌عنوان یک «{bp.user_type}» فعالیت کنی و مشکل اصلی‌ات این است که: {first_problem}."
-        )
-    elif bp.confidence_level != "low":
-        understood_summary = "فهمیدم چه نیازی داری."
-    else:
+    # 1. What we understood — a short, human sentence. Prefers the
+    #    hand-written conversational template for the industries the
+    #    puzzle specifically asked to sound natural; otherwise falls back
+    #    to a simple, still-human sentence built from user_type/problem.
+    if bp.confidence_level == "low":
         understood_summary = "هنوز کاملاً مشخص نیست دقیقاً چه نیازی داری — برایت چند سؤال ساده می‌پرسیم تا بهتر بفهمیم."
-
-    # 2/3. What we recommend, and why — built fresh in Persian rather than
-    # reusing reason_for_recommendation directly, since that field embeds
-    # the raw English first_output_type phrase (e.g. "product catalog +
-    # order page") which must never reach the user-facing recommendation.
-    if bp.user_type and bp.problem_to_solve:
-        first_problem = bp.problem_to_solve.split("؛")[0]
-        reason = (
-            f"با توجه به اینکه مشکل اصلی‌ات «{first_problem}» است، "
-            f"«{output_label}» ساده‌ترین و مناسب‌ترین نقطه شروع است."
-        )
+    elif industry in _HUMAN_UNDERSTOOD_FA:
+        understood_summary = _HUMAN_UNDERSTOOD_FA[industry]
+    elif bp.user_type:
+        understood_summary = f"فهمیدم می‌خواهی به‌عنوان یک «{bp.user_type}» کارت را جلو ببری."
     else:
-        reason = f"«{output_label}» ساده‌ترین و سریع‌ترین نقطه شروع متناسب با نیازت است."
+        understood_summary = "فهمیدم چه نیازی داری."
+
+    # 2/3. Why this output fits — a short human sentence (the "بهتر است..."
+    # style), followed by a clear, simple recommendation line. Built fresh
+    # in Persian rather than reusing reason_for_recommendation directly,
+    # since that field embeds the raw English first_output_type phrase.
+    if industry in _HUMAN_REASON_FA:
+        why_sentence = _HUMAN_REASON_FA[industry]
+    elif bp.problem_to_solve:
+        first_problem = bp.problem_to_solve.split("؛")[0]
+        why_sentence = f"برای شروع، بهتر است اول مشکل اصلی حل شود: {first_problem}."
+    else:
+        why_sentence = "برای شروع، بهتر است ساده و سریع جلو برویم."
+
+    reason = f"{why_sentence} پیشنهاد من: {output_label}."
 
     # 4. Honest note about what's actually being built right now.
     if _is_non_website_output(bp.first_output_type):
@@ -102,14 +127,15 @@ def build_recommendation_text(bp: ProductBlueprint) -> dict[str, str]:
             "این فقط نخستین خروجی کارخانه است، نه همه قابلیت‌های آن."
         )
 
-    # 5. What's NOT recommended for the first version, if available.
+    # 5. What's NOT recommended for the first version — kept short and
+    #    plain rather than the longer, more formal generator wording.
     not_recommended_note = None
     if bp.not_recommended:
-        items_fa = "، ".join(bp.not_recommended)
-        if bp.reason_not_recommended:
-            not_recommended_note = f"{bp.reason_not_recommended}"
+        if industry == "homemade_food_products":
+            not_recommended_note = "فعلاً اپلیکیشن یا فروشگاه کامل پیشنهاد نمی‌شود، چون برای شروع سنگین و پرهزینه است."
         else:
-            not_recommended_note = f"برای نسخه اول، {items_fa} پیشنهاد نمی‌شود."
+            items_fa = "، ".join(bp.not_recommended)
+            not_recommended_note = f"فعلاً {items_fa} پیشنهاد نمی‌شود، چون برای شروع سنگین و پرهزینه است."
 
     return {
         "understood_summary": understood_summary,
