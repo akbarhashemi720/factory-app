@@ -54,6 +54,12 @@ class ProductBlueprint(BaseModel):
     # What the person actually said, and what we believe they actually need —
     # kept separate from any assumption about which tool solves it.
     raw_user_request: str | None = None
+    # Language of the raw request, detected by the generator (not assumed
+    # by the model). "fa" = Persian/Farsi, "en" = English, "unknown" = not
+    # confidently detected. Intentionally a plain string (not an enum
+    # restricted to "fa"/"en") so future languages like "fr" or "ar" can
+    # be added later without changing this model again.
+    user_language: str | None = None
     user_need: str | None = None
     user_type: str | None = None
     business_or_personal_context: str | None = None
