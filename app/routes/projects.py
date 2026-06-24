@@ -12,6 +12,7 @@ from app.models import (
     ApproveVersionResponse,
     ConfirmUnderstandingRequest,
     ConfirmUnderstandingResponse,
+    RecommendationResponse,
     CreateProjectRequest,
     CreateProjectResponse,
     CustomerProjectsResponse,
@@ -553,6 +554,52 @@ def confirm_understanding(project_id: UUID, body: ConfirmUnderstandingRequest, x
         understanding_id=body.understanding_id,
         confirmed_by_user=True,
         status="ready_for_builder",
+    )
+
+
+# ─── GET /projects/{project_id}/recommendation ───────────────────────────────
+# Puzzle 6.6 — the new "پیشنهاد کارخانه" user-facing step. Read-only and
+# fully isolated from website_intent/pm_agent/builder/export: it only
+# reads the project's raw_text and runs the existing isolated rule-based
+# generator (app/blueprint/generator.py) to produce a SAFE, human-readable
+# Persian recommendation. Never exposes internal fields (industry_category,
+# confidence_level, recommended_tool_type) — see RecommendationResponse
+# and app/blueprint/recommendation_text.py. Does not call, gate-check, or
+# depend on /blueprint/draft (which stays internal-debug-only).
+
+@router.get("/{project_id}/recommendation", response_model=RecommendationResponse)
+def get_recommendation(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+    db = get_db()
+    _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    raw_text = ""
+    try:
+        req_result = (
+            db.table("user_requests")
+            .select("raw_text")
+            .eq("project_id", str(project_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if req_result.data:
+            raw_text = req_result.data[0]["raw_text"] or ""
+    except Exception:
+        raw_text = ""
+
+    from app.blueprint.generator import generate_product_blueprint
+    from app.blueprint.recommendation_text import build_recommendation_text
+
+    blueprint = generate_product_blueprint(raw_text)
+    text_fields = build_recommendation_text(blueprint)
+
+    return RecommendationResponse(
+        project_id=project_id,
+        understood_summary=text_fields["understood_summary"],
+        recommended_output_label=text_fields["recommended_output_label"],
+        reason=text_fields["reason"],
+        first_output_note=text_fields["first_output_note"],
+        not_recommended_note=text_fields["not_recommended_note"],
     )
 
 
