@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.models import HealthResponse
 from app.routes import projects
+from app.routes import blueprint
 
 app = FastAPI(
     title="AI Factory Backend",
@@ -23,6 +24,11 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(projects.router)
+# Isolated, backend-only test router for the future AI Factory v2 thinking
+# layer (Puzzle 5). Prefix "/blueprint" is a separate top-level path from
+# "/projects", so it cannot collide with /projects/{project_id} or any
+# other existing dynamic route. Not used by the frontend.
+app.include_router(blueprint.router)
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────
