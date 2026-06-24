@@ -267,6 +267,24 @@ class ConfirmUnderstandingResponse(BaseModel):
     status: str
 
 
+class RecommendationResponse(BaseModel):
+    """
+    Puzzle 6.6 — the user-facing "پیشنهاد کارخانه" recommendation step.
+
+    Deliberately exposes ONLY simple, human-readable Persian fields —
+    never raw ProductBlueprint internals (industry_category,
+    confidence_level, recommended_tool_type, etc.). Those stay
+    internal/debug-only via the separately-gated /blueprint/draft
+    endpoint, which this route does NOT call or depend on.
+    """
+    project_id: UUID
+    understood_summary: str       # "فهمیدم می‌خواهی ..."
+    recommended_output_label: str  # human label for what we'll build, e.g. "کاتالوگ محصول و صفحه سفارش ساده"
+    reason: str                    # why this fits better than the alternative
+    first_output_note: str         # honest note: this is the first available output, not the whole factory
+    not_recommended_note: str | None = None  # what we are NOT building first, and why (optional)
+
+
 class GeneratePreviewResponse(BaseModel):
     project_id: UUID
     status: str
@@ -334,6 +352,15 @@ class DirectEditRequest(BaseModel):
     version_id: UUID
     selected_section_id: str = Field(..., min_length=1)
     selected_element_id: str | None = None
+    # Layer hierarchy — when the clicked element sits inside a box/card
+    # (e.g. an icon inside its colored box inside a product card), these
+    # carry the resolved ids for the other layers, and target_layer says
+    # which one the user actually picked in the "می‌خواهی کدام قسمت را
+    # تغییر بدهی؟" selector ("element" | "box" | "card"). Defaults to
+    # "element" (the exact clicked thing) when not specified.
+    selected_box_id: str | None = None
+    selected_card_id: str | None = None
+    target_layer: str | None = None      # "element" | "box" | "card"
     # One or more of the following may be set, depending on what the user
     # changed in the mini-dashboard. All optional — only present fields
     # are applied.
