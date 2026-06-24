@@ -102,8 +102,12 @@ _CAFE_INTENTS = {
 def _build_spec(scenario: str, und: dict, website_intent: str | None = None,
                  raw_text: str = "") -> dict:
     domain = und.get("business_domain") or ""
-    # Fallback: some keyword signal may live in bullets when business_domain is absent (mock path)
-    signal_text = domain + " " + " ".join(und.get("bullets", []) or [])
+    # Fallback: some keyword signal may live in bullets when business_domain is absent (mock path).
+    # Also include raw_text itself — business_domain/bullets can be empty even
+    # when the original sentence clearly carries the signal (e.g. "ترشی خانگی"),
+    # which was the root cause of store-domain content (clothing/fashion items)
+    # appearing for unrelated sellers like homemade pickle/food sellers.
+    signal_text = domain + " " + " ".join(und.get("bullets", []) or []) + " " + (raw_text or "")
 
     # website_intent is the precise router — falls back to detected_scenario mapping
     intent = website_intent or _scenario_to_intent(scenario)
@@ -128,7 +132,7 @@ def _build_spec(scenario: str, und: dict, website_intent: str | None = None,
             "general_class": _education_spec(signal_text),
             "booking": _booking_spec(),
             "telegram_bot": _booking_spec(bot=True),
-            "store": _store_spec(),
+            "store": _store_spec(signal_text),
         }
         spec = SPECS.get(scenario, _general_spec())
 
@@ -455,7 +459,49 @@ def _booking_spec(bot=False):
     }
 
 
-def _store_spec():
+def _store_spec(domain: str = ""):
+    """
+    Generic online-store website. "Store" covers many different kinds of
+    sellers (clothing, food, accessories, ...) — domain keyword detection
+    picks content that actually matches what the user is selling, instead
+    of always defaulting to a clothing/fashion catalog. Same pattern as
+    _education_spec's is_cooking/is_music/is_art detection.
+    """
+    domain = domain or ""
+    is_homemade_food = any(
+        k in domain for k in [
+            "ترشی", "خیارشور", "زیتون", "مربا", "غذای خانگی", "غذای آماده",
+            "شیرینی خانگی", "کیک خانگی", "خانگی",
+        ]
+    )
+
+    if is_homemade_food:
+        return {
+            "name": "فروشگاه خانگی",
+            "tagline": "دست‌پخت خانگی، تازه و با کیفیت، مستقیم به دست شما",
+            "type": "فروشگاه محصولات خانگی",
+            "color": "#B45309",
+            "color2": "#FBBF24",
+            "hero_btn": "مشاهده محصولات",
+            "hero_btn2": "سفارش آنلاین",
+            "nav_items": ["خانه", "محصولات", "سفارش", "درباره ما", "تماس"],
+            "features": ["نمایش محصولات با عکس و قیمت", "فرم سفارش ساده", "تهیه تازه و خانگی", "ارسال سریع"],
+            "menu_items": [
+                {"icon": "🥒", "name": "ترشی مخلوط", "desc": "سبزیجات تازه، طعم اصیل خانگی", "price": "۸۵,۰۰۰"},
+                {"icon": "🍆", "name": "ترشی بادمجان", "desc": "دست‌پخت سنتی، بدون مواد نگه‌دارنده", "price": "۹۰,۰۰۰"},
+                {"icon": "🧄", "name": "ترشی سیر", "desc": "تخمیر طبیعی، طعم تند و خوش‌عطر", "price": "۷۵,۰۰۰"},
+                {"icon": "🥬", "name": "ترشی لیته", "desc": "بادمجان و سبزیجات، طعم اصیل شمالی", "price": "۸۰,۰۰۰"},
+                {"icon": "🥒", "name": "خیارشور خانگی", "desc": "ترش و خوش‌طعم، بدون افزودنی", "price": "۷۰,۰۰۰"},
+                {"icon": "🫒", "name": "زیتون پرورده", "desc": "زیتون دست‌پرورده با گردو و انار", "price": "۱۱۰,۰۰۰"},
+            ],
+            "why_us": [
+                {"icon": "🏠", "title": "دست‌پخت خانگی", "desc": "تهیه‌شده با مواد اولیه تازه و طبیعی"},
+                {"icon": "🚚", "title": "ارسال سریع", "desc": "تحویل تازه و به‌موقع"},
+                {"icon": "✅", "title": "بدون مواد نگه‌دارنده", "desc": "فقط طعم اصیل و سالم"},
+            ],
+            "about": "محصولات خانگی ما با دستور پخت سنتی و مواد اولیه تازه تهیه می‌شود — همان طعمی که دلتان می‌خواهد.",
+        }
+
     return {
         "name": "فروشگاه آنلاین برتر",
         "tagline": "خرید آسان، تحویل سریع، کیفیت تضمینی",
@@ -467,17 +513,17 @@ def _store_spec():
         "nav_items": ["خانه", "محصولات", "تخفیف‌ها", "سبد خرید", "تماس"],
         "features": ["نمایش محصولات با تصویر", "سبد خرید آنلاین", "پرداخت امن", "پیگیری سفارش"],
         "menu_items": [
-            {"icon":"👕","name":"تیشرت کلاسیک","desc":"نخ پنبه، رنگ‌بندی متنوع","price":"۱۲۰,۰۰۰"},
-            {"icon":"👜","name":"کیف چرم","desc":"چرم طبیعی، دست‌دوز","price":"۸۵۰,۰۰۰"},
-            {"icon":"⌚","name":"ساعت مردانه","desc":"ضدآب، گارانتی یک‌ساله","price":"۴۵۰,۰۰۰"},
-            {"icon":"👟","name":"کفش اسپرت","desc":"سایزبندی کامل","price":"۶۵۰,۰۰۰"},
-            {"icon":"🎒","name":"کوله پشتی","desc":"ضدآب، جادار","price":"۲۸۰,۰۰۰"},
-            {"icon":"🕶️","name":"عینک آفتابی","desc":"محافظ UV، طراحی مدرن","price":"۱۹۰,۰۰۰"},
+            {"icon": "👕", "name": "تیشرت کلاسیک", "desc": "نخ پنبه، رنگ‌بندی متنوع", "price": "۱۲۰,۰۰۰"},
+            {"icon": "👜", "name": "کیف چرم", "desc": "چرم طبیعی، دست‌دوز", "price": "۸۵۰,۰۰۰"},
+            {"icon": "⌚", "name": "ساعت مردانه", "desc": "ضدآب، گارانتی یک‌ساله", "price": "۴۵۰,۰۰۰"},
+            {"icon": "👟", "name": "کفش اسپرت", "desc": "سایزبندی کامل", "price": "۶۵۰,۰۰۰"},
+            {"icon": "🎒", "name": "کوله پشتی", "desc": "ضدآب، جادار", "price": "۲۸۰,۰۰۰"},
+            {"icon": "🕶️", "name": "عینک آفتابی", "desc": "محافظ UV، طراحی مدرن", "price": "۱۹۰,۰۰۰"},
         ],
         "why_us": [
-            {"icon":"🚚","title":"ارسال سریع","desc":"تحویل ۱ تا ۲ روز کاری"},
-            {"icon":"🔒","title":"خرید امن","desc":"پرداخت با درگاه معتبر"},
-            {"icon":"↩️","title":"ضمانت بازگشت","desc":"۷ روز ضمانت بازگشت کالا"},
+            {"icon": "🚚", "title": "ارسال سریع", "desc": "تحویل ۱ تا ۲ روز کاری"},
+            {"icon": "🔒", "title": "خرید امن", "desc": "پرداخت با درگاه معتبر"},
+            {"icon": "↩️", "title": "ضمانت بازگشت", "desc": "۷ روز ضمانت بازگشت کالا"},
         ],
         "about": "ما محصولات با کیفیت را با بهترین قیمت و سریع‌ترین زمان ارسال، مستقیم به دست شما می‌رسانیم.",
     }
