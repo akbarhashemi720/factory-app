@@ -111,10 +111,23 @@ def build_sections_from_spec(spec: dict[str, Any]) -> list[dict[str, Any]]:
     }))
 
     if spec.get("menu_items"):
+        # "type" carries enough signal to tell a homemade-food/order store
+        # apart from everything else (cafe, education, generic store, ...).
+        # Only that specific case gets food/order wording — every other
+        # template keeps the existing generic title/button untouched.
+        is_homemade_food_store = spec.get("type") == "کاتالوگ و سفارش محصولات خانگی"
+        menu_title = "محصولات قابل سفارش" if is_homemade_food_store else "پیشنهادهای ویژه"
+        menu_subtitle = (
+            "محصولات خانگی ما را ببین و سفارش بده"
+            if is_homemade_food_store
+            else "نمونه‌ای از آنچه مشتریان شما می‌بینند"
+        )
+        card_button_label = "افزودن به سفارش" if is_homemade_food_store else "انتخاب"
         sections.append(new_block("menu_grid", {
-            "title": "پیشنهادهای ویژه",
-            "subtitle": "نمونه‌ای از آنچه مشتریان شما می‌بینند",
+            "title": menu_title,
+            "subtitle": menu_subtitle,
             "items": spec.get("menu_items", []),
+            "card_button_label": card_button_label,
         }))
 
     sections.append(new_block("gallery", {
