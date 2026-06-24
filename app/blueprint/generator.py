@@ -34,19 +34,56 @@ _STRONG_MATCH_THRESHOLD = 2
 
 def generate_product_blueprint(raw_user_request: str) -> ProductBlueprint:
     """
-    Match a raw Persian user request against the Industry-to-Product Map
-    using simple keyword/phrase overlap, and return a filled
-    ProductBlueprint. Falls back to a low-confidence blueprint with
-    clarifying questions when no reasonable match is found.
+    Detect the request's language, then:
+      - "fa" -> match against the (Persian-first) Industry-to-Product Map
+        using simple keyword/phrase overlap, same as before.
+      - anything else ("en", "unknown") -> the Industry-to-Product Map is
+        Persian-first and not safe to match against yet, so return a
+        language-appropriate fallback blueprint instead of guessing.
     """
     text = (raw_user_request or "").strip()
+    language = _detect_user_language(text)
+
+    if language != "fa":
+        return _fallback_blueprint(text, language)
+
     entry, match_count = _find_best_match(text)
 
     if entry is None:
-        return _fallback_blueprint(text)
+        return _fallback_blueprint(text, language)
 
     confidence = "high" if match_count >= _STRONG_MATCH_THRESHOLD else "medium"
-    return _blueprint_from_entry(text, entry, confidence)
+    return _blueprint_from_entry(text, entry, confidence, language)
+
+
+# ── Language detection ───────────────────────────────────────────────────────
+# Simple, rule-based, no external APIs — just enough to stop the architecture
+# from being locked to Persian. Real multilingual matching (an English/other
+# Industry-to-Product Map, real language models, etc.) is future work.
+
+def _detect_user_language(text: str) -> str:
+    """
+    "fa"      -- text contains Persian/Arabic-script characters
+    "en"      -- text contains mostly Latin letters (and no Persian script)
+    "unknown" -- neither condition confidently matches (e.g. empty text,
+                 numbers/symbols only, or a script we don't handle yet)
+    """
+    if not text:
+        return "unknown"
+
+    has_persian_script = any(
+        "\u0600" <= ch <= "\u06FF" or "\u0750" <= ch <= "\u077F"
+        for ch in text
+    )
+    if has_persian_script:
+        return "fa"
+
+    latin_letters = sum(1 for ch in text if ch.isalpha() and ch.isascii())
+    total_letters = sum(1 for ch in text if ch.isalpha())
+    if total_letters > 0 and latin_letters == total_letters:
+        return "en"
+
+    return "unknown"
 
 
 # ── Matching ─────────────────────────────────────────────────────────────────
@@ -138,7 +175,7 @@ def _phrase_overlaps(text: str, phrase: str) -> bool:
 
 # ── Blueprint construction ──────────────────────────────────────────────────
 
-def _blueprint_from_entry(text: str, entry: dict, confidence: str) -> ProductBlueprint:
+def _blueprint_from_entry(text: str, entry: dict, confidence: str, language: str) -> ProductBlueprint:
     digital_needs = entry.get("digital_need_categories", [])
     tool_types = entry.get("recommended_tool_types", [])
     best_output = entry.get("best_first_output")
@@ -166,6 +203,7 @@ def _blueprint_from_entry(text: str, entry: dict, confidence: str) -> ProductBlu
 
     return ProductBlueprint(
         raw_user_request=text,
+        user_language=language,
         user_need=user_need,
         user_type=user_type,
         business_or_personal_context=(
@@ -195,23 +233,45 @@ def _blueprint_from_entry(text: str, entry: dict, confidence: str) -> ProductBlu
     )
 
 
-def _fallback_blueprint(text: str) -> ProductBlueprint:
+_FA_OPEN_QUESTIONS = [
+    "می‌خواهی چه کاری برایت راه بیفتد؟",
+    "این ابزار برای فروش، مدیریت کارها، حساب‌وکتاب، رزرو، یا پاسخ‌گویی به مشتری است؟",
+    "آیا مخاطب این ابزار مشتری است، کارمند است، یا خودت هستی؟",
+]
+
+_EN_OPEN_QUESTIONS = [
+    "What do you want this tool to help you with?",
+    "Is this for selling, booking, accounting, task management, or customer support?",
+    "Who will use this tool: customers, employees, or you?",
+]
+
+
+def _fallback_blueprint(text: str, language: str) -> ProductBlueprint:
     """
-    Used when no industry-map entry matches well enough. Honest,
-    low-confidence, and asks simple clarifying questions instead of
-    guessing — never invents a tool recommendation it isn't sure about.
+    Used when no industry-map entry matches well enough, OR when the
+    request isn't Persian (the Industry-to-Product Map is Persian-first
+    and not safe to match against other languages yet). Honest,
+    low-confidence, and asks simple clarifying questions in the
+    detected language instead of guessing — never invents a tool
+    recommendation it isn't sure about.
     """
+    if language == "en":
+        questions = _EN_OPEN_QUESTIONS
+        user_need = "The user's need is not yet fully clear."
+    else:
+        # Persian fallback for "fa", and also the safe default for
+        # "unknown" — Persian is this platform's first/primary language.
+        questions = _FA_OPEN_QUESTIONS
+        user_need = "نیاز کاربر هنوز به‌طور کامل مشخص نشده است"
+
     return ProductBlueprint(
         raw_user_request=text,
-        user_need="نیاز کاربر هنوز به‌طور کامل مشخص نشده است",
+        user_language=language,
+        user_need=user_need,
         recommended_tool_type=None,
         recommended_starting_point=None,
         first_output_type=None,
         confidence_level="low",
         assumptions=[],
-        open_questions=[
-            "می‌خواهی چه کاری برایت راه بیفتد؟",
-            "این ابزار برای فروش، مدیریت کارها، حساب‌وکتاب، رزرو، یا پاسخ‌گویی به مشتری است؟",
-            "آیا مخاطب این ابزار مشتری است، کارمند است، یا خودت هستی؟",
-        ],
+        open_questions=questions,
     )
