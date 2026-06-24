@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -35,6 +36,8 @@ from app.services.memory import (create_learning_note, create_reusable_pattern,
 from app.services.pm_agent import generate_understanding, refine_understanding
 from app.services.ai_revision import interpret_and_apply
 from app.services.reviewer import review_preview
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -275,6 +278,28 @@ def submit_request(project_id: UUID, body: SubmitRequestBody, x_customer_id: Opt
     req_result = db.table("user_requests").insert(req_data).execute()
     if not req_result.data:
         raise HTTPException(status_code=500, detail="Failed to save user request")
+
+    # ── AI Factory v2 — Product Blueprint parallel draft (LOG ONLY) ─────────
+    # Puzzle 4: generates a ProductBlueprint in parallel purely for backend
+    # observability, to see how the isolated rule-based generator
+    # (app/blueprint/generator.py) would have classified real user requests.
+    # This does NOT affect the response, is NOT stored, is NOT shown to the
+    # user, and NEVER influences website_intent, pm_agent, builder, or
+    # export. Any failure here is caught and logged as a warning only —
+    # the live Website Preview Builder flow always continues normally.
+    try:
+        from app.blueprint.generator import generate_product_blueprint
+        draft_blueprint = generate_product_blueprint(body.raw_text)
+        logger.info(
+            "ProductBlueprint parallel draft: industry=%s, first_output=%s, "
+            "confidence=%s, not_recommended=%s",
+            draft_blueprint.industry_category,
+            draft_blueprint.first_output_type,
+            draft_blueprint.confidence_level,
+            draft_blueprint.not_recommended,
+        )
+    except Exception as exc:
+        logger.warning("ProductBlueprint parallel draft failed (non-fatal): %s", exc)
 
     _update_project(db, project_id, {"status": "waiting_for_user_confirmation"})
 
@@ -574,7 +599,7 @@ def generate_preview_endpoint(project_id: UUID, x_customer_id: Optional[str] = H
     if not understanding.get("raw_text"):
         try:
             req_result = (
-                db.table("requests")
+                db.table("user_requests")
                 .select("raw_text")
                 .eq("project_id", str(project_id))
                 .order("created_at", desc=True)
