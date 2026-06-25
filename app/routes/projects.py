@@ -14,6 +14,7 @@ from app.models import (
     ConfirmUnderstandingResponse,
     RecommendationResponse,
     RetryBuildResponse,
+    RevisionCopyResponse,
     CreateProjectRequest,
     CreateProjectResponse,
     CustomerProjectsResponse,
@@ -630,6 +631,87 @@ def retry_build(project_id: UUID, x_customer_id: Optional[str] = Header(default=
     _update_project(db, project_id, {"status": "ready_for_builder"})
 
     return RetryBuildResponse(project_id=project_id, status="ready_for_builder")
+
+
+# ─── POST /projects/{project_id}/create-revision-copy ────────────────────────
+# Puzzle — "ساخت نسخه جدید از روی این". The user decided NOT to reopen an
+# approved project for editing (that would mutate an immutable approved
+# snapshot). Instead, this creates a brand-new, fully independent project
+# pre-filled with the original raw request text, and routes it through the
+# exact same flow as a normal new request — same as submit_request — so the
+# new project goes through fresh understanding/recommendation/build, picking
+# up any code/behavior changes since the original was approved.
+#
+# The approved project is NEVER touched by this endpoint: no status change,
+# no version mutation, no approval record change. This endpoint only reads
+# from it (its raw_text) and writes to two brand-new rows (a new project,
+# a new user_requests row) — nothing it does can affect the original.
+
+@router.post("/{project_id}/create-revision-copy", response_model=RevisionCopyResponse)
+def create_revision_copy(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+    import uuid as _uuid
+    db = get_db()
+    source_project = _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    # Smallest-safe-version copy: the original raw request text only.
+    # (Understanding/preview are NOT copied — the new project re-runs the
+    # normal understanding/recommendation/build flow from scratch, which
+    # avoids any risk of carrying over malformed or stale structured data.)
+    raw_text = ""
+    try:
+        req_result = (
+            db.table("user_requests")
+            .select("raw_text")
+            .eq("project_id", str(project_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if req_result.data:
+            raw_text = req_result.data[0]["raw_text"] or ""
+    except Exception:
+        raw_text = ""
+
+    if not raw_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not find the original request text to copy.",
+        )
+
+    # ── Create the new, fully independent project ──────────────────────────
+    new_project_data: dict = {
+        "language":    source_project.get("language", "fa"),
+        "status":      "draft",
+        "scenario":    None,
+        "customer_id": source_project.get("customer_id") or str(_uuid.uuid4()),
+    }
+    if source_project.get("user_id"):
+        new_project_data["user_id"] = source_project["user_id"]
+
+    new_project_result = db.table("projects").insert(new_project_data).execute()
+    if not new_project_result.data:
+        raise HTTPException(status_code=500, detail="Failed to create new project")
+    new_project_id = new_project_result.data[0]["id"]
+
+    # ── Copy the raw request into the new project, mirroring submit_request ─
+    req_data = {
+        "project_id": str(new_project_id),
+        "raw_text": raw_text,
+        "input_type": "text",
+        "detected_language": source_project.get("language", "fa"),
+        "attachments": [],
+    }
+    new_req_result = db.table("user_requests").insert(req_data).execute()
+    if not new_req_result.data:
+        raise HTTPException(status_code=500, detail="Failed to copy request into new project")
+
+    _update_project(db, new_project_id, {"status": "waiting_for_user_confirmation"})
+
+    return RevisionCopyResponse(
+        new_project_id=new_project_id,
+        status="waiting_for_user_confirmation",
+        raw_text=raw_text,
+    )
 
 
 # ─── POST /projects/{project_id}/generate-preview ────────────────────────────
