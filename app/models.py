@@ -290,6 +290,20 @@ class RevisionCopyResponse(BaseModel):
     raw_text: str
 
 
+class ReopenForEditResponse(BaseModel):
+    """
+    Response for POST /projects/{id}/reopen-for-edit — explicitly chosen
+    by the founder: an approved project CAN be reopened for direct
+    editing (not just copied), but it must go back through the normal
+    review + final-approval gate before it counts as approved again.
+    This sets status back to 'ready_for_user_review' so the existing
+    /revision and /edit-direct flows work unchanged, and /approve
+    requires a fresh explicit confirmation to re-lock it.
+    """
+    project_id: UUID
+    status: str
+
+
 class RecommendationResponse(BaseModel):
     """
     Puzzle 6.6 — the user-facing "پیشنهاد کارخانه" recommendation step.
