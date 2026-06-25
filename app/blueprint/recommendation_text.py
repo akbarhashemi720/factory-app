@@ -1,6 +1,8 @@
 """
 Recommendation wording — Puzzle 6.6 (AI Factory v2 user-facing step),
-polished in Puzzle 6.7 to feel more human and less mechanical.
+polished in Puzzle 6.7 to feel more human and less mechanical, and
+fixed in Puzzle 8 to stop showing a weak/generic recommendation for
+low-confidence requests.
 
 Converts a ProductBlueprint (from app.blueprint.generator) into the
 simple, human-readable Persian fields needed for the "پیشنهاد راه‌حل"
@@ -18,6 +20,23 @@ Honesty rule: when the recommended first output is NOT a website
 must clearly say that dashboard/bot/app outputs are not fully supported
 yet, and that what gets built right now is still a website-preview-based
 first look — never claim an unsupported output is fully buildable.
+
+Puzzle 8 — three distinct outcomes, chosen WITHOUT changing the
+RecommendationResponse schema (still exactly 5 string/optional-string
+fields). The frontend tells the three cases apart by checking which
+sentinel marker appears in `reason` — a plain string check, not a new
+field — so the API response shape genuinely never changes:
+
+  Case 1 (medium/high confidence): a real, specific recommendation —
+    reason starts with the normal "برای شروع، ..." sentence (unchanged
+    from before this puzzle).
+  Case 2 (low confidence, but raw_text clearly asks for a website/page):
+    an honest "quick start" note instead of a weak guess — reason is
+    exactly the quick-start sentence, tagged with the marker
+    QUICK_START_MARKER for the frontend to detect.
+  Case 3 (low confidence, truly ambiguous): a short clarification
+    question instead of a fake recommendation — reason is exactly the
+    clarification sentence, tagged with CLARIFICATION_MARKER.
 """
 from __future__ import annotations
 
@@ -64,6 +83,30 @@ _HUMAN_REASON_FA: dict[str, str] = {
     "office_task_management": "برای شروع، یک نمای ساده از وظایف و مسئول هرکدام کافی است.",
 }
 
+# Keywords that signal a clear website/page intent even when the
+# industry/need itself couldn't be matched (Case 2). Checked against the
+# raw user request, case-insensitively for the Latin terms.
+_WEBSITE_INTENT_KEYWORDS = (
+    "سایت", "وبسایت", "وب‌سایت", "صفحه", "لندینگ",
+    "landing", "website", "page", "site",
+)
+
+# Frontend-detectable sentinel markers — plain substrings inside the
+# existing `reason` field, NOT a new API field. The RecommendationResponse
+# schema is unchanged; the frontend just checks which marker is present.
+QUICK_START_MARKER = "[[QUICK_START]]"
+CLARIFICATION_MARKER = "[[CLARIFICATION]]"
+
+_QUICK_START_TEXT_FA = (
+    "درخواستت را به‌عنوان یک پیش‌نمایش اولیه وب‌سایت/صفحه شروع می‌کنم. "
+    "بعد از دیدن نسخه اول، می‌توانی تغییرش بدهی."
+)
+
+_CLARIFICATION_TEXT_FA = (
+    "برای اینکه پیشنهاد دقیق‌تری بدهم، یک جمله ساده‌تر بگو: "
+    "می‌خواهی مشتری جذب کنی، چیزی بفروشی، نوبت بگیری، حساب‌ها را ببینی، یا کارها را مدیریت کنی؟"
+)
+
 
 def _output_label_fa(first_output_type: str | None) -> str:
     if not first_output_type:
@@ -78,32 +121,57 @@ def _is_non_website_output(first_output_type: str | None) -> bool:
     return any(marker in text for marker in _NON_WEBSITE_OUTPUT_MARKERS)
 
 
-def build_recommendation_text(bp: ProductBlueprint) -> dict[str, str]:
+def _has_clear_website_intent(raw_text: str) -> bool:
+    text = (raw_text or "").lower()
+    return any(kw.lower() in text for kw in _WEBSITE_INTENT_KEYWORDS)
+
+
+def build_recommendation_text(bp: ProductBlueprint, raw_text: str = "") -> dict[str, str]:
     """
     Returns the 4-5 plain Persian fields needed for the RecommendationResponse:
     understood_summary, recommended_output_label, reason, first_output_note,
     not_recommended_note (or None).
+
+    raw_text is the user's original request — used ONLY to detect clear
+    website/page intent for Case 2 (Puzzle 8). It does not change
+    ProductBlueprint or the generator; this is presentation-layer logic.
     """
     output_label = _output_label_fa(bp.first_output_type)
     industry = bp.industry_category or ""
 
-    # 1. What we understood — a short, human sentence. Prefers the
-    #    hand-written conversational template for the industries the
-    #    puzzle specifically asked to sound natural; otherwise falls back
-    #    to a simple, still-human sentence built from user_type/problem.
+    # ── Puzzle 8: low-confidence branch — never show the old weak/generic
+    # "هنوز کاملاً مشخص نیست" recommendation. Either an honest quick-start
+    # note (clear website intent) or a short clarification question
+    # (truly ambiguous) — never a fake specific recommendation.
     if bp.confidence_level == "low":
-        understood_summary = "هنوز کاملاً مشخص نیست دقیقاً چه نیازی داری — برایت چند سؤال ساده می‌پرسیم تا بهتر بفهمیم."
-    elif industry in _HUMAN_UNDERSTOOD_FA:
+        if _has_clear_website_intent(raw_text):
+            return {
+                "understood_summary": "متوجه شدم می‌خواهی یک وب‌سایت یا صفحه داشته باشی.",
+                "recommended_output_label": "پیش‌نمایش اولیه وب‌سایت",
+                "reason": f"{QUICK_START_MARKER}{_QUICK_START_TEXT_FA}",
+                "first_output_note": (
+                    "این فقط نخستین خروجی کارخانه است، نه همه قابلیت‌های آن."
+                ),
+                "not_recommended_note": None,
+            }
+        else:
+            return {
+                "understood_summary": "هنوز کاملاً مشخص نیست دقیقاً چه نیازی داری.",
+                "recommended_output_label": "",
+                "reason": f"{CLARIFICATION_MARKER}{_CLARIFICATION_TEXT_FA}",
+                "first_output_note": "",
+                "not_recommended_note": None,
+            }
+
+    # ── Case 1 (medium/high confidence) — the normal, specific
+    # recommendation, unchanged from before this puzzle.
+    if industry in _HUMAN_UNDERSTOOD_FA:
         understood_summary = _HUMAN_UNDERSTOOD_FA[industry]
     elif bp.user_type:
         understood_summary = f"فهمیدم می‌خواهی به‌عنوان یک «{bp.user_type}» کارت را جلو ببری."
     else:
         understood_summary = "فهمیدم چه نیازی داری."
 
-    # 2/3. Why this output fits — a short human sentence (the "بهتر است..."
-    # style), followed by a clear, simple recommendation line. Built fresh
-    # in Persian rather than reusing reason_for_recommendation directly,
-    # since that field embeds the raw English first_output_type phrase.
     if industry in _HUMAN_REASON_FA:
         why_sentence = _HUMAN_REASON_FA[industry]
     elif bp.problem_to_solve:
@@ -114,7 +182,6 @@ def build_recommendation_text(bp: ProductBlueprint) -> dict[str, str]:
 
     reason = f"{why_sentence} پیشنهاد من: {output_label}."
 
-    # 4. Honest note about what's actually being built right now.
     if _is_non_website_output(bp.first_output_type):
         first_output_note = (
             f"این خروجی («{output_label}») هنوز در نسخه فعلی کارخانه به‌طور کامل پشتیبانی نمی‌شود. "
@@ -127,8 +194,6 @@ def build_recommendation_text(bp: ProductBlueprint) -> dict[str, str]:
             "این فقط نخستین خروجی کارخانه است، نه همه قابلیت‌های آن."
         )
 
-    # 5. What's NOT recommended for the first version — kept short and
-    #    plain rather than the longer, more formal generator wording.
     not_recommended_note = None
     if bp.not_recommended:
         if industry == "homemade_food_products":
