@@ -267,6 +267,17 @@ class ConfirmUnderstandingResponse(BaseModel):
     status: str
 
 
+class RetryBuildResponse(BaseModel):
+    """
+    Response for POST /projects/{id}/retry-build — resets a project stuck
+    in 'building'/'reviewing' (e.g. after an internal reviewer rejection
+    that reverted it without giving the user any way to retry) back to
+    'ready_for_builder' so the normal generate-preview flow can run again.
+    """
+    project_id: UUID
+    status: str
+
+
 class RecommendationResponse(BaseModel):
     """
     Puzzle 6.6 — the user-facing "پیشنهاد کارخانه" recommendation step.
