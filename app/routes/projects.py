@@ -13,6 +13,7 @@ from app.models import (
     ConfirmUnderstandingRequest,
     ConfirmUnderstandingResponse,
     RecommendationResponse,
+    RetryBuildResponse,
     CreateProjectRequest,
     CreateProjectResponse,
     CustomerProjectsResponse,
@@ -591,7 +592,7 @@ def get_recommendation(project_id: UUID, x_customer_id: Optional[str] = Header(d
     from app.blueprint.recommendation_text import build_recommendation_text
 
     blueprint = generate_product_blueprint(raw_text)
-    text_fields = build_recommendation_text(blueprint)
+    text_fields = build_recommendation_text(blueprint, raw_text)
 
     return RecommendationResponse(
         project_id=project_id,
@@ -601,6 +602,34 @@ def get_recommendation(project_id: UUID, x_customer_id: Optional[str] = Header(d
         first_output_note=text_fields["first_output_note"],
         not_recommended_note=text_fields["not_recommended_note"],
     )
+
+
+# ─── POST /projects/{project_id}/generate-preview ────────────────────────────
+
+# ─── POST /projects/{project_id}/retry-build ─────────────────────────────────
+# Fixes a real-world stuck state: if the internal reviewer ever rejects a
+# preview (review_result["safe_to_show_user"] is False), generate-preview
+# reverts the project to "building" so it can be retried — but there was
+# previously no way for the user to actually trigger that retry, since
+# generate-preview itself requires status == "ready_for_builder". This
+# endpoint is the missing retry trigger: it ONLY resets status for a
+# project genuinely stuck in "building"/"reviewing", and changes nothing
+# else (no version/understanding/builder logic touched).
+
+@router.post("/{project_id}/retry-build", response_model=RetryBuildResponse)
+def retry_build(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+    db = get_db()
+    project = _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    if project["status"] not in ("building", "reviewing"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Project status is '{project['status']}'. Retry is only available for stuck builds.",
+        )
+
+    _update_project(db, project_id, {"status": "ready_for_builder"})
+
+    return RetryBuildResponse(project_id=project_id, status="ready_for_builder")
 
 
 # ─── POST /projects/{project_id}/generate-preview ────────────────────────────
