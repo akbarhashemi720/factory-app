@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -13,6 +14,7 @@ from app.models import (
     ConfirmUnderstandingRequest,
     ConfirmUnderstandingResponse,
     RecommendationResponse,
+    NeedFirstResponse,
     RetryBuildResponse,
     RevisionCopyResponse,
     ReopenForEditResponse,
@@ -603,6 +605,68 @@ def get_recommendation(project_id: UUID, x_customer_id: Optional[str] = Header(d
         reason=text_fields["reason"],
         first_output_note=text_fields["first_output_note"],
         not_recommended_note=text_fields["not_recommended_note"],
+    )
+
+
+# ─── GET /projects/{project_id}/need-first-check ─────────────────────────────
+# Puzzle: need-first recommendation BEFORE website/detail diagnostic
+# questions. Gated entirely behind ENABLE_NEED_FIRST_RECOMMENDATION
+# (same env-flag pattern as ENABLE_INTERNAL_BLUEPRINT_ENDPOINT in
+# app/routes/blueprint.py). When the flag is off, this endpoint still
+# exists but simply reports enabled=False and the frontend falls back to
+# the old website-first diagnostic flow unchanged — no other code path
+# is touched. When on, it runs the isolated, rule-based
+# app/advisor/need_first_advisor.py (NOT mock_pm/anthropic_pm) and
+# returns a safe, human-readable recommendation. Read-only: does not
+# write to understandings, does not change project status, does not
+# touch the database at all beyond reading raw_text.
+
+@router.get("/{project_id}/need-first-check", response_model=NeedFirstResponse)
+def need_first_check(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+    db = get_db()
+    _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    if os.getenv("ENABLE_NEED_FIRST_RECOMMENDATION", "").lower() != "true":
+        return NeedFirstResponse(
+            project_id=project_id,
+            understood_summary="",
+            framing_note="",
+            options=[],
+            needs_clarification=False,
+        )
+
+    raw_text = ""
+    try:
+        req_result = (
+            db.table("user_requests")
+            .select("raw_text")
+            .eq("project_id", str(project_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if req_result.data:
+            raw_text = req_result.data[0]["raw_text"] or ""
+    except Exception:
+        raw_text = ""
+
+    from app.advisor.need_first_advisor import get_need_first_recommendation
+    from app.advisor.need_first_text import build_need_first_text
+
+    advice = get_need_first_recommendation(raw_text)
+    text_fields = build_need_first_text(advice)
+
+    return NeedFirstResponse(
+        project_id=project_id,
+        understood_summary=text_fields["understood_summary"],
+        framing_note=text_fields["framing_note"],
+        options=text_fields["options"],
+        factory_recommendation_key=text_fields["factory_recommendation_key"],
+        factory_recommendation_label=text_fields["factory_recommendation_label"],
+        reason=text_fields["reason"],
+        needs_clarification=text_fields["needs_clarification"],
+        clarification_question=text_fields["clarification_question"],
+        clarification_options=text_fields["clarification_options"],
     )
 
 
