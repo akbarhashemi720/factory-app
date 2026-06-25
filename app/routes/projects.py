@@ -15,6 +15,7 @@ from app.models import (
     RecommendationResponse,
     RetryBuildResponse,
     RevisionCopyResponse,
+    ReopenForEditResponse,
     CreateProjectRequest,
     CreateProjectResponse,
     CustomerProjectsResponse,
@@ -631,6 +632,41 @@ def retry_build(project_id: UUID, x_customer_id: Optional[str] = Header(default=
     _update_project(db, project_id, {"status": "ready_for_builder"})
 
     return RetryBuildResponse(project_id=project_id, status="ready_for_builder")
+
+
+# ─── POST /projects/{project_id}/reopen-for-edit ─────────────────────────────
+# Founder decision (explicit, after weighing the alternative of an
+# immutable approved snapshot): a customer should be able to directly
+# edit an already-approved project, not just view it read-only or copy
+# it into a separate project. This endpoint sets status back to
+# "ready_for_user_review" — the exact same status normal (pre-approval)
+# editing uses — so the EXISTING /revision and /edit-direct endpoints
+# handle the actual editing unchanged. The project is simply no longer
+# "approved" until the customer explicitly re-approves it via /approve,
+# which (unchanged) always inserts a NEW approved_versions row — so the
+# original approval record from before this edit is preserved in full,
+# never overwritten or deleted.
+
+@router.post("/{project_id}/reopen-for-edit", response_model=ReopenForEditResponse)
+def reopen_for_edit(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+    db = get_db()
+    project = _get_project_for_customer_or_404(db, project_id, x_customer_id)
+
+    if project["status"] not in ("approved", "exported"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Project status is '{project['status']}'. Reopen-for-edit is only for approved projects.",
+        )
+
+    if not project.get("current_version_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="This project has no version to edit.",
+        )
+
+    _update_project(db, project_id, {"status": "ready_for_user_review"})
+
+    return ReopenForEditResponse(project_id=project_id, status="ready_for_user_review")
 
 
 # ─── POST /projects/{project_id}/create-revision-copy ────────────────────────
