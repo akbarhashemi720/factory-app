@@ -322,6 +322,31 @@ class RecommendationResponse(BaseModel):
     not_recommended_note: str | None = None  # what we are NOT building first, and why (optional)
 
 
+class NeedFirstResponse(BaseModel):
+    """
+    Puzzle: need-first advisor step — shown BEFORE the existing
+    website-section diagnostic question (mock_pm/anthropic_pm's
+    _DIAGNOSTIC), only when ENABLE_NEED_FIRST_RECOMMENDATION is "true".
+
+    Mirrors RecommendationResponse's style: only simple, human-readable
+    Persian fields, never raw internal tool_key values directly (those
+    only appear inside `options`, paired with their Persian label, so
+    the frontend can echo the chosen option_key back when continuing —
+    but nothing here is a confidence_level/industry_category-style debug
+    field).
+    """
+    project_id: UUID
+    understood_summary: str            # "فهمیدم مشکل اصلی تو ... است."
+    framing_note: str                  # "سایت، بات، ... فقط راه‌حل هستند؛ ..."
+    options: list[dict[str, str]] = Field(default_factory=list)   # [{option_key, label}], length 0-3
+    factory_recommendation_key: str | None = None
+    factory_recommendation_label: str | None = None
+    reason: str | None = None
+    needs_clarification: bool = False
+    clarification_question: str | None = None
+    clarification_options: list[str] = Field(default_factory=list)
+
+
 class GeneratePreviewResponse(BaseModel):
     project_id: UUID
     status: str
