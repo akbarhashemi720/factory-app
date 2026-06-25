@@ -278,6 +278,18 @@ class RetryBuildResponse(BaseModel):
     status: str
 
 
+class RevisionCopyResponse(BaseModel):
+    """
+    Response for POST /projects/{id}/create-revision-copy — creates a new,
+    independent, editable project pre-filled with the original raw_text
+    from an approved project. The approved project itself is never
+    mutated: no status change, no version/approval data touched.
+    """
+    new_project_id: UUID
+    status: str
+    raw_text: str
+
+
 class RecommendationResponse(BaseModel):
     """
     Puzzle 6.6 — the user-facing "پیشنهاد کارخانه" recommendation step.
