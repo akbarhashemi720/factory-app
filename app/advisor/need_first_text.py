@@ -25,6 +25,7 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
             "clarification_question": advice.get("clarification_question") or "",
             "clarification_options": list(advice.get("clarification_options") or []),
             "preview_archetype": None,
+            "recommended_proposed_sections": [],
         }
 
     pain = advice.get("detected_pain_or_goal") or "نیاز کسب‌وکارت"
@@ -54,20 +55,26 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
         # This is what lets the frontend send the CORRECT archetype to
         # generate-preview regardless of which option the user actually
         # clicked.
+        #
+        # Puzzle: "Fix empty fake recommendation detail screens" — every
+        # option ALSO now carries its own proposed_sections (3-5 items),
+        # guaranteed non-empty for every recognized tool_key/archetype.
+        # The frontend uses THIS list for the confirmation screen instead
+        # of the old (often-empty) website-section `bullets`.
         options.append({
             "option_key": o["tool_key"],
             "label": label,
             "archetype": o.get("archetype") or "",
+            "proposed_sections": o.get("proposed_sections") or [],
         })
 
     rec_key = advice.get("factory_recommendation")
     # Prefer an explicit combo label (e.g. "جذب مشتری جدید + منوی دیجیتال")
     # over the single matched option's label, since the factory's actual
     # recommendation can legitimately combine two of the listed paths.
-    rec_label = advice.get("factory_recommendation_combo_label") or next(
-        (o["label"] for o in (advice.get("recommended_options") or []) if o["tool_key"] == rec_key),
-        None,
-    )
+    rec_option = next((o for o in (advice.get("recommended_options") or []) if o["tool_key"] == rec_key), None)
+    rec_label = advice.get("factory_recommendation_combo_label") or (rec_option["label"] if rec_option else None)
+    rec_sections = (rec_option or {}).get("proposed_sections") or []
 
     return {
         "understood_summary": understood_summary,
@@ -80,4 +87,5 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
         "clarification_question": None,
         "clarification_options": [],
         "preview_archetype": advice.get("preview_archetype"),
+        "recommended_proposed_sections": rec_sections,
     }
