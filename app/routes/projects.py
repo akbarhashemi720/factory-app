@@ -18,6 +18,7 @@ from app.models import (
     RetryBuildResponse,
     RevisionCopyResponse,
     ReopenForEditResponse,
+    GeneratePreviewRequest,
     CreateProjectRequest,
     CreateProjectResponse,
     CustomerProjectsResponse,
@@ -818,7 +819,11 @@ def create_revision_copy(project_id: UUID, x_customer_id: Optional[str] = Header
 
 @router.post("/{project_id}/generate-preview",
              response_model=GeneratePreviewResponse)
-def generate_preview_endpoint(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+def generate_preview_endpoint(
+    project_id: UUID,
+    body: GeneratePreviewRequest | None = None,
+    x_customer_id: Optional[str] = Header(default=None),
+):
     """
     Build simulated preview + run reviewer + create version.
     Project must be in ready_for_builder with a confirmed understanding.
@@ -868,6 +873,17 @@ def generate_preview_endpoint(project_id: UUID, x_customer_id: Optional[str] = H
                 understanding["raw_text"] = req_result.data[0]["raw_text"]
         except Exception:
             pass
+
+    # Need-first recommendation continuity (in-memory only — never
+    # written to the `understandings` row or any table). Appending the
+    # confirmed scope text to raw_text lets the builder's existing
+    # keyword-based wording (e.g. html_builder.py's is_homemade_food
+    # branch, _apply_cafe_inspiration's family selector) honestly match
+    # what the user actually confirmed, without any Builder refactor.
+    if body and body.confirmed_recommendation_scope:
+        understanding["raw_text"] = (
+            f"{understanding.get('raw_text') or ''} {body.confirmed_recommendation_scope}"
+        ).strip()
 
     # ── Builder ───────────────────────────────────────────────────────────────
     _update_project(db, project_id, {"status": "building"})
