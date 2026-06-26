@@ -338,7 +338,12 @@ class NeedFirstResponse(BaseModel):
     project_id: UUID
     understood_summary: str            # "فهمیدم مشکل اصلی تو ... است."
     framing_note: str                  # "سایت، بات، ... فقط راه‌حل هستند؛ ..."
-    options: list[dict[str, str]] = Field(default_factory=list)   # [{option_key, label, archetype}], length 0-3
+    # Puzzle: "Fix empty fake recommendation detail screens" — each
+    # option dict now also carries proposed_sections (a list of 3-5
+    # Persian strings), so the type widens from dict[str, str] to
+    # dict[str, Any] to hold that nested list. Still just an in-memory
+    # API response shape — no database/schema change.
+    options: list[dict[str, Any]] = Field(default_factory=list)   # [{option_key, label, archetype, proposed_sections}], length 0-3
     factory_recommendation_key: str | None = None
     factory_recommendation_label: str | None = None
     reason: str | None = None
@@ -350,6 +355,13 @@ class NeedFirstResponse(BaseModel):
     # field like confidence_level/industry_category; it's closer to
     # `status` fields used elsewhere in this API for routing.
     preview_archetype: str | None = None
+    # Guaranteed non-empty (when a recognized recommendation exists)
+    # list of proposed sections for the TOP-level recommended option —
+    # this is what the confirmation screen ("این بخش‌ها را پیشنهاد
+    # می‌کنم") must show instead of an empty card. The frontend also has
+    # per-option proposed_sections inside `options` above for whichever
+    # option the user actually clicks.
+    recommended_proposed_sections: list[str] = Field(default_factory=list)
 
 
 class GeneratePreviewRequest(BaseModel):
