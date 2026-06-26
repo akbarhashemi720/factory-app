@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -272,6 +273,7 @@ def create_project(body: CreateProjectRequest):
 @router.post("/{project_id}/request", response_model=SubmitRequestResponse)
 def submit_request(project_id: UUID, body: SubmitRequestBody, x_customer_id: Optional[str] = Header(default=None)):
     """Save user request and advance to waiting_for_user_confirmation."""
+    _t_req_start = time.perf_counter()
     db = get_db()
     _get_project_for_customer_or_404(db, project_id, x_customer_id)
 
@@ -310,6 +312,8 @@ def submit_request(project_id: UUID, body: SubmitRequestBody, x_customer_id: Opt
 
     _update_project(db, project_id, {"status": "waiting_for_user_confirmation"})
 
+    logger.info("[TIMING] POST /request total took %.2fs", time.perf_counter() - _t_req_start)
+
     row = req_result.data[0]
     return SubmitRequestResponse(
         project_id=project_id,
@@ -346,7 +350,13 @@ def create_understanding(project_id: UUID, x_customer_id: Optional[str] = Header
     language = latest.get("detected_language") or project.get("language", "fa")
 
     try:
+        from app.config import settings as _pm_settings
+        _t0 = time.perf_counter()
         ai = generate_understanding(latest["raw_text"], language)
+        logger.info(
+            "[TIMING] /understanding generate_understanding() (provider=%s) took %.2fs",
+            _pm_settings.pm_provider, time.perf_counter() - _t0,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PM Agent failed: {e}") from e
 
@@ -381,7 +391,9 @@ def create_understanding(project_id: UUID, x_customer_id: Optional[str] = Header
         "about_text": ai.get("about_text"),
         "first_version_scope": ai.get("first_version_scope"),
     }
+    _t1 = time.perf_counter()
     und_result = db.table("understandings").insert(und_data).execute()
+    logger.info("[TIMING] /understanding DB insert took %.2fs", time.perf_counter() - _t1)
     if not und_result.data:
         raise HTTPException(status_code=500, detail="Failed to save understanding")
 
@@ -624,6 +636,7 @@ def get_recommendation(project_id: UUID, x_customer_id: Optional[str] = Header(d
 
 @router.get("/{project_id}/need-first-check", response_model=NeedFirstResponse)
 def need_first_check(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+    _t_nf_start = time.perf_counter()
     db = get_db()
     _get_project_for_customer_or_404(db, project_id, x_customer_id)
 
@@ -656,6 +669,7 @@ def need_first_check(project_id: UUID, x_customer_id: Optional[str] = Header(def
 
     advice = get_need_first_recommendation(raw_text)
     text_fields = build_need_first_text(advice)
+    logger.info("[TIMING] GET /need-first-check (rule-based advisor) took %.3fs", time.perf_counter() - _t_nf_start)
 
     return NeedFirstResponse(
         project_id=project_id,
