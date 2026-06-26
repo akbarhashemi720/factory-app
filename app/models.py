@@ -345,6 +345,11 @@ class NeedFirstResponse(BaseModel):
     needs_clarification: bool = False
     clarification_question: str | None = None
     clarification_options: list[str] = Field(default_factory=list)
+    # Internal routing tag (e.g. "task_dashboard_mockup") so the preview
+    # builder knows which mockup archetype to render — NOT a raw debug
+    # field like confidence_level/industry_category; it's closer to
+    # `status` fields used elsewhere in this API for routing.
+    preview_archetype: str | None = None
 
 
 class GeneratePreviewRequest(BaseModel):
@@ -360,8 +365,16 @@ class GeneratePreviewRequest(BaseModel):
     honest about what was actually confirmed — frontend-state only,
     never persisted to the database, never written to `understandings`
     or any other table.
+
+    confirmed_preview_archetype carries the internal routing tag (e.g.
+    "task_dashboard_mockup") from the need-first advisor's
+    preview_archetype field, so the builder can render the right KIND
+    of mockup (dashboard vs catalog vs menu vs portfolio vs landing)
+    instead of always falling back to a generic website. Also
+    frontend-state only — never persisted.
     """
     confirmed_recommendation_scope: str | None = None
+    confirmed_preview_archetype: str | None = None
 
 
 class GeneratePreviewResponse(BaseModel):
