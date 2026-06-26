@@ -40,13 +40,23 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
             "اول باید ببینیم کدام مسیر برای هدفت بهتر است."
         )
 
-    options = [
-        {"option_key": o["tool_key"], "label": o["label"]}
-        for o in (advice.get("recommended_options") or [])
-    ]
+    explanations = advice.get("recommended_options_explanations") or {}
+    options = []
+    for o in (advice.get("recommended_options") or []):
+        label = o["label"]
+        explanation = explanations.get(o["tool_key"])
+        if explanation:
+            label = f"{label} — {explanation}"
+        options.append({"option_key": o["tool_key"], "label": label})
 
     rec_key = advice.get("factory_recommendation")
-    rec_label = next((o["label"] for o in options if o["option_key"] == rec_key), None)
+    # Prefer an explicit combo label (e.g. "جذب مشتری جدید + منوی دیجیتال")
+    # over the single matched option's label, since the factory's actual
+    # recommendation can legitimately combine two of the listed paths.
+    rec_label = advice.get("factory_recommendation_combo_label") or next(
+        (o["label"] for o in (advice.get("recommended_options") or []) if o["tool_key"] == rec_key),
+        None,
+    )
 
     return {
         "understood_summary": understood_summary,
