@@ -243,6 +243,23 @@ class AnswerDiagnosticRequest(BaseModel):
     diagnostic_answer: str = Field(..., min_length=1)
 
 
+class CreateUnderstandingRequest(BaseModel):
+    """
+    Optional request body for POST /understanding. ALL fields optional,
+    body itself optional — omitting it is 100% identical to before this
+    field existed.
+
+    Legacy Replacement Sprint (Phase 5): skip_legacy_pm tells the
+    backend the user already confirmed a need-first Product Contract
+    (a valid archetype) BEFORE this call — in that case, the endpoint
+    must NOT call mock_pm/anthropic_pm for product decisions at all. It
+    creates a neutral placeholder understanding row instead (no
+    diagnostic_question, no scenario/website_intent decision), so the
+    old PM can never override the already-confirmed contract.
+    """
+    skip_legacy_pm: bool = False
+
+
 class GenerateUnderstandingResponse(BaseModel):
     project_id: UUID
     understanding_id: UUID
@@ -384,9 +401,18 @@ class GeneratePreviewRequest(BaseModel):
     of mockup (dashboard vs catalog vs menu vs portfolio vs landing)
     instead of always falling back to a generic website. Also
     frontend-state only — never persisted.
+
+    Legacy Replacement Sprint (Phase 3) — the remaining three fields
+    complete the Product Contract shape. When ENABLE_NEED_FIRST_
+    RECOMMENDATION=true, ALL FOUR contract fields below are required
+    for preview generation to proceed at all — see
+    app/contract/product_contract.py's validate_contract().
     """
     confirmed_recommendation_scope: str | None = None
     confirmed_preview_archetype: str | None = None
+    selected_option_id: str | None = None
+    selected_label: str | None = None
+    proposed_sections: list[str] = Field(default_factory=list)
 
 
 class GeneratePreviewResponse(BaseModel):
