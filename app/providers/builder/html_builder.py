@@ -248,8 +248,40 @@ def _task_dashboard_spec(raw_text: str = "") -> dict:
     first version (per "make the smallest safe change possible" — no
     real task storage/backend yet, consistent with known_limitations
     in generate()'s dashboard branch above).
+
+    Puzzle: "Fix empty fake recommendation detail screens" — both
+    "داشبورد کارها و جلسات" and "تقسیم وظایف بین افراد" currently share
+    the task_dashboard_mockup archetype, but must still produce
+    genuinely different previews (per acceptance Test 2). raw_text
+    already includes the confirmed_recommendation_scope text (appended
+    in-memory by generate_preview_endpoint), so a simple keyword check
+    for "تقسیم وظایف" / team-assignment language is enough to switch
+    the column labels from generic status to per-person assignment,
+    without a separate archetype or Builder refactor.
     """
-    is_meetings_focused = any(k in (raw_text or "") for k in ["جلسات", "جلسه", "میتینگ"])
+    text = raw_text or ""
+    is_team_focused = any(k in text for k in ["تقسیم وظایف", "بین افراد", "اعضای تیم", "هر نفر"])
+    is_meetings_focused = any(k in text for k in ["جلسات", "جلسه", "میتینگ"])
+
+    if is_team_focused:
+        return {
+            "name": "تقسیم وظایف تیم",
+            "tagline": "هر کار مال کیست؟ — یک پیش‌نمایش اولیه",
+            "type": "تقسیم وظایف بین افراد",
+            "color": "#2563EB",
+            "color2": "#60A5FA",
+            "nav_items": ["خانه"],
+            "features": ["تعیین مسئول هر کار", "وضعیت انجام کارهای هر نفر", "مهلت‌ها و یادآوری‌ها"],
+            "dashboard_columns": [
+                {"label": "علی", "tasks": ["تهیه گزارش هفتگی", "هماهنگی با تیم فروش"]},
+                {"label": "مریم", "tasks": ["بررسی درخواست‌های مشتریان", "تنظیم برنامه هفته بعد"]},
+                {"label": "رضا", "tasks": ["ارسال فاکتور ماه قبل", "بایگانی اسناد قدیمی"]},
+            ],
+            "dashboard_meetings": [
+                {"time": "۱۰:۰۰", "title": "جلسه هماهنگی تیم"},
+                {"time": "۱۶:۰۰", "title": "بررسی پیشرفت هفتگی با اعضا"},
+            ],
+        }
 
     return {
         "name": "داشبورد کارهای اداری" if is_meetings_focused else "داشبورد ساده وظایف",
