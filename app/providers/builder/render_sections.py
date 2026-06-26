@@ -339,6 +339,44 @@ def _render_task_dashboard(sid: str, c: dict, color: str, color2: str, overrides
     </div>"""
 
 
+def _render_crm_followup(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
+    """
+    Customer Follow-up List Mockup (Puzzle: "Fix selected option
+    propagation"). A simple table-like list of customers with status/
+    last-contact/next-step — genuinely different visual structure from
+    _render_task_dashboard (no status columns, no meetings list).
+    """
+    title = c.get("title", "")
+    subtitle = c.get("subtitle", "")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
+
+    rows_html = ""
+    for cust in c.get("customers", []):
+        rows_html += f"""
+        <div class="crm-row">
+          <div class="crm-name">{cust.get("name", "")}</div>
+          <div class="crm-status">{cust.get("status", "")}</div>
+          <div class="crm-last-contact">{cust.get("last_contact", "")}</div>
+          <div class="crm-next-step">{cust.get("next_step", "")}</div>
+        </div>"""
+
+    return f"""
+    <div class="section crm-section"{_bg_style_attr(section_bg)}>
+      {title_html}
+      {subtitle_html}
+      <div class="crm-table">
+        <div class="crm-row crm-header">
+          <div class="crm-name">مشتری</div>
+          <div class="crm-status">وضعیت پیگیری</div>
+          <div class="crm-last-contact">آخرین تماس/پیام</div>
+          <div class="crm-next-step">مرحله بعدی</div>
+        </div>
+        {rows_html if rows_html else '<div class="dash-empty">مشتری‌ای ثبت نشده</div>'}
+      </div>
+    </div>"""
+
+
 def _render_gallery(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     n = c.get("item_count", 4)
     items = "".join(
@@ -528,6 +566,7 @@ _RENDERERS = {
     "hero": _render_hero,
     "menu_grid": _render_menu_grid,
     "task_dashboard": _render_task_dashboard,
+    "crm_followup": _render_crm_followup,
     "gallery": _render_gallery,
     "about": _render_about,
     "benefits": _render_benefits,
@@ -547,6 +586,7 @@ SECTION_TYPE_LABEL_FA = {
     "hero": "بخش اصلی سایت",
     "menu_grid": "بخش منو",
     "task_dashboard": "بخش داشبورد وظایف",
+    "crm_followup": "بخش پیگیری مشتری‌ها",
     "gallery": "گالری تصاویر",
     "about": "بخش درباره ما",
     "benefits": "بخش چرا ما را انتخاب کنید",
@@ -647,6 +687,17 @@ _BASE_CSS = """
   .dash-meeting-time {{ color:{color}; font-weight:700; min-width:56px; }}
   .dash-meeting-title {{ color:#4a3f3a; }}
   .dash-empty {{ color:#8a7a6e; font-size:0.84rem; text-align:center; padding:8px 0; }}
+
+  /* ── Customer Follow-up List Mockup (Puzzle: option propagation fix) ─ */
+  .crm-section {{ background:#FAF5FF; }}
+  .crm-table {{ background:#fff; border-radius:{radius}; box-shadow:0 2px 10px rgba(45,36,36,0.06); overflow:hidden; max-width:780px; margin:0 auto; }}
+  .crm-row {{ display:grid; grid-template-columns:1.3fr 1.3fr 1fr 1.4fr; gap:10px; padding:13px 18px; font-size:0.84rem; border-bottom:1px solid #F1E9FB; align-items:center; }}
+  .crm-row:last-child {{ border-bottom:none; }}
+  .crm-header {{ background:{color}10; font-weight:700; color:#4a3f3a; font-size:0.78rem; }}
+  .crm-name {{ font-weight:600; color:#2D2424; }}
+  .crm-status {{ color:{color}; font-weight:600; }}
+  .crm-last-contact {{ color:#8a7a6e; }}
+  .crm-next-step {{ color:#4a3f3a; }}
 """
 
 # ── Luxury theme override (cafe_luxury_premium) ─────────────────────────────
