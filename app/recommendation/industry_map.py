@@ -70,7 +70,7 @@ INDUSTRY_TO_PRODUCT_MAP: list[dict[str, Any]] = [
             "پیگیری وضعیت سفارش برای مشتری",
             "اعلان سفارش جدید به فروشنده",
         ],
-        "not_recommended": ["mobile app", "full e-commerce platform"],
+        "not_recommended": ["اپلیکیشن موبایل", "پلتفرم فروشگاهی کامل"],
         "reason_not_recommended": (
             "برای یک فروشنده خانگی در شروع کار، اپلیکیشن موبایل یا یک "
             "پلتفرم فروشگاهی کامل بیش از حد سنگین و غیرضروری است؛ یک "
@@ -111,7 +111,7 @@ INDUSTRY_TO_PRODUCT_MAP: list[dict[str, Any]] = [
             "نوبت‌دهی برای اندازه‌گیری",
             "گالری دسته‌بندی‌شده بر اساس نوع لباس",
         ],
-        "not_recommended": ["mobile app", "full booking system with payments"],
+        "not_recommended": ["اپلیکیشن موبایل", "سیستم رزرو کامل با پرداخت آنلاین"],
         "reason_not_recommended": (
             "در شروع کار، یک خیاط مستقل به یک اپ کامل یا سیستم رزرو با "
             "پرداخت آنلاین نیاز ندارد؛ آنچه واقعاً کمک می‌کند نمایش نمونه "
@@ -151,7 +151,7 @@ INDUSTRY_TO_PRODUCT_MAP: list[dict[str, Any]] = [
             "یادآور نوبت برای مشتری",
             "مدیریت تقویم نوبت‌های پر/خالی",
         ],
-        "not_recommended": ["full booking platform with online payments"],
+        "not_recommended": ["سیستم رزرو کامل با پرداخت آنلاین"],
         "reason_not_recommended": (
             "یک سیستم رزرو کامل با پرداخت آنلاین و مدیریت چندشعبه‌ای برای "
             "یک سالن کوچک در شروع کار بیش از نیاز است؛ یک فرم رزرو ساده "
@@ -191,7 +191,7 @@ INDUSTRY_TO_PRODUCT_MAP: list[dict[str, Any]] = [
             "دسته‌بندی هزینه‌ها",
             "اتصال به حساب بانکی",
         ],
-        "not_recommended": ["full accounting/ERP software"],
+        "not_recommended": ["نرم‌افزار کامل حسابداری یا ERP"],
         "reason_not_recommended": (
             "نرم‌افزار کامل حسابداری یا ERP برای یک کسب‌وکار کوچک یا "
             "فریلنسر در شروع کار بسیار پیچیده و پرهزینه است؛ یک داشبورد "
@@ -231,11 +231,10 @@ INDUSTRY_TO_PRODUCT_MAP: list[dict[str, Any]] = [
             "گزارش هفتگی پیشرفت",
             "اولویت‌بندی خودکار وظایف",
         ],
-        "not_recommended": ["full enterprise project-management suite"],
+        "not_recommended": ["سیستم مدیریت پروژه کامل و پیچیده"],
         "reason_not_recommended": (
-            "یک ابزار کامل و پیچیده مدیریت پروژه سازمانی برای یک تیم کوچک "
-            "در شروع کار بیش از حد سنگین است؛ یک داشبورد ساده وظایف همان "
-            "نیاز اصلی (نظم و شفافیت کارها) را برطرف می‌کند."
+            "فعلاً یک سیستم مدیریت پروژه کامل و پیچیده پیشنهاد نمی‌شود، "
+            "چون برای شروع سنگین و پرهزینه است."
         ),
         "possible_ai_agents": ["Task Agent", "Analytics Agent"],
     },
