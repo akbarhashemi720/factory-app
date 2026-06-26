@@ -20,6 +20,7 @@ from app.models import (
     RevisionCopyResponse,
     ReopenForEditResponse,
     GeneratePreviewRequest,
+    CreateUnderstandingRequest,
     CreateProjectRequest,
     CreateProjectResponse,
     CustomerProjectsResponse,
@@ -327,7 +328,11 @@ def submit_request(project_id: UUID, body: SubmitRequestBody, x_customer_id: Opt
 
 @router.post("/{project_id}/understanding",
              response_model=GenerateUnderstandingResponse)
-def create_understanding(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+def create_understanding(
+    project_id: UUID,
+    body: CreateUnderstandingRequest | None = None,
+    x_customer_id: Optional[str] = Header(default=None),
+):
     """Run PM Agent on the latest user request and save understanding."""
     db = get_db()
     project = _get_project_for_customer_or_404(db, project_id, x_customer_id)
@@ -349,16 +354,61 @@ def create_understanding(project_id: UUID, x_customer_id: Optional[str] = Header
     latest = req_result.data[0]
     language = latest.get("detected_language") or project.get("language", "fa")
 
-    try:
-        from app.config import settings as _pm_settings
-        _t0 = time.perf_counter()
-        ai = generate_understanding(latest["raw_text"], language)
-        logger.info(
-            "[TIMING] /understanding generate_understanding() (provider=%s) took %.2fs",
-            _pm_settings.pm_provider, time.perf_counter() - _t0,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PM Agent failed: {e}") from e
+    # Legacy Replacement Sprint — Phase 5: when need-first mode is on AND
+    # the frontend signals a Product Contract was already confirmed
+    # (skip_legacy_pm=True), do NOT call mock_pm/anthropic_pm at all.
+    # The old PM must never be allowed to override an already-confirmed
+    # contract — this neutral placeholder row satisfies the DB
+    # requirement (generate-preview needs a confirmed understanding row
+    # to exist) without making any product decision of its own.
+    skip_legacy = bool(body and body.skip_legacy_pm) and \
+        os.getenv("ENABLE_NEED_FIRST_RECOMMENDATION", "").lower() == "true"
+
+    if skip_legacy:
+        logger.info("[NEED-FIRST] /understanding: skipping legacy PM (mock_pm/anthropic_pm not called)")
+        ai = {
+            "bullets": [],
+            "assumptions": [],
+            "clarification_questions": [],
+            "detected_scenario": None,   # never set — cannot influence preview
+            "confidence": None,
+            "product_type": None,
+            "business_domain": None,
+            "website_intent": None,      # never set — cannot influence preview
+            "primary_goal": None,
+            "target_users": None,
+            "product_name": None,
+            "visual_style": None,
+            "color_palette": {},
+            "hero_title": None,
+            "hero_subtitle": None,
+            "primary_cta": None,
+            "secondary_cta": None,
+            "navigation_items": [],
+            "required_sections": [],
+            "user_actions": [],
+            "owner_actions": [],
+            "suggested_features": [],
+            "menu_items": [],
+            "benefits": [],
+            "about_text": None,
+            "first_version_scope": None,
+            "has_diagnostic_question": False,  # never asks the old website-section question
+            "preamble": None,
+            "diagnostic_question": None,
+            "diagnostic_options": [],
+        }
+    else:
+        try:
+            from app.config import settings as _pm_settings
+            _t0 = time.perf_counter()
+            ai = generate_understanding(latest["raw_text"], language)
+            logger.info(
+                "[TIMING] /understanding generate_understanding() (provider=%s) took %.2fs",
+                _pm_settings.pm_provider, time.perf_counter() - _t0,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PM Agent failed: {e}") from e
 
     und_data = {
         "project_id": str(project_id),
@@ -446,6 +496,21 @@ def answer_diagnostic(project_id: UUID, body: AnswerDiagnosticRequest, x_custome
     if und_row["project_id"] != str(project_id):
         raise HTTPException(status_code=400,
                             detail="Understanding does not belong to this project")
+
+    # Legacy Replacement Sprint — Phase 2 defensive guard: a placeholder
+    # understanding (created with skip_legacy_pm=True, detected_scenario
+    # is None) was never asked a legacy diagnostic question, so it
+    # should never reach this endpoint at all in normal operation — the
+    # frontend only calls this when has_diagnostic_question was true,
+    # which placeholder rows never set. This guard makes that
+    # structural — even a stray/buggy frontend call cannot route a
+    # contract-driven project through legacy PM refinement.
+    if und_row.get("detected_scenario") is None and \
+       os.getenv("ENABLE_NEED_FIRST_RECOMMENDATION", "").lower() == "true":
+        raise HTTPException(
+            status_code=400,
+            detail="این پروژه از مسیر نیاز‌محور آمده و سؤال شفاف‌سازی قدیمی روی آن قابل‌اجرا نیست.",
+        )
 
     # Fetch the original request text for context
     req_result = (
@@ -934,6 +999,31 @@ def generate_preview_endpoint(
     if body and body.confirmed_preview_archetype:
         understanding["confirmed_preview_archetype"] = body.confirmed_preview_archetype
 
+    # Legacy Replacement Sprint — Phase 3/6 (the core fix): when
+    # need-first mode is on, build and validate a Product Contract
+    # BEFORE calling the builder at all. If validation fails, return a
+    # clear 400 here — the request never reaches html_builder.generate(),
+    # so there is no chance of a silent fallback to legacy _build_spec().
+    if os.getenv("ENABLE_NEED_FIRST_RECOMMENDATION", "").lower() == "true":
+        from app.contract.product_contract import validate_contract, ContractValidationError
+        try:
+            contract = validate_contract(
+                raw_request=understanding.get("raw_text"),
+                selected_option_id=(body.selected_option_id if body else None),
+                selected_label=(body.selected_label if body else None),
+                preview_archetype=(body.confirmed_preview_archetype if body else None),
+                proposed_sections=(body.proposed_sections if body else None),
+                confirmed_scope_text=(body.confirmed_recommendation_scope if body else None),
+            )
+        except ContractValidationError as e:
+            logger.info("[NEED-FIRST] generate-preview blocked: %s", e.reason_code)
+            raise HTTPException(status_code=400, detail=e.user_message_fa) from e
+        understanding["_product_contract"] = contract
+        logger.info(
+            "[NEED-FIRST] Product Contract validated: archetype=%s option=%s",
+            contract.preview_archetype, contract.selected_option_id,
+        )
+
     # ── Builder ───────────────────────────────────────────────────────────────
     _update_project(db, project_id, {"status": "building"})
 
@@ -948,14 +1038,23 @@ def generate_preview_endpoint(
         except Exception:
             pass  # pattern lookup is best-effort; never blocks build
 
-    builder_result = generate_preview(project, understanding, scenario_pattern)
+    from app.providers.builder.html_builder import LegacyFlowBlockedError
+    try:
+        builder_result = generate_preview(project, understanding, scenario_pattern)
+    except LegacyFlowBlockedError as e:
+        raise HTTPException(status_code=400, detail=e.user_message_fa) from e
+
     # If html builder is configured but not available, fall back to inline html builder
     preview_data = builder_result["preview_data"]
     if not preview_data.get("_is_html_preview"):
+        from app.providers.builder.html_builder import generate as html_build
         try:
-            from app.providers.builder.html_builder import generate as html_build
             builder_result = html_build(project, understanding, scenario_pattern)
             preview_data = builder_result["preview_data"]
+        except LegacyFlowBlockedError as e:
+            # Phase 6: must always surface, never be swallowed and
+            # replaced with a mock/legacy preview.
+            raise HTTPException(status_code=400, detail=e.user_message_fa) from e
         except Exception:
             pass  # keep mock preview if html builder unavailable
 
