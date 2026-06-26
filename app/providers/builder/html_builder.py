@@ -23,7 +23,9 @@ reusing the generic warm-cafe layout with different colors.
 """
 from __future__ import annotations
 from typing import Any
-from app.providers.builder.section_model import build_sections_from_spec, build_luxury_cafe_sections
+from app.providers.builder.section_model import (
+    build_sections_from_spec, build_luxury_cafe_sections, build_task_dashboard_sections,
+)
 from app.providers.builder.render_sections import render_website
 from app.inspiration.selector import pick_default_reference
 
@@ -43,6 +45,109 @@ def generate(
     )
 
     raw_text = understanding.get("raw_text") or " ".join(understanding.get("bullets", []) or [])
+
+    # Preview archetype routing (Puzzle: "Make preview product-type aware
+    # and stop generic website fallback"). confirmed_preview_archetype is
+    # an in-memory-only tag carried from the need-first advisor's
+    # confirmed recommendation (see app/routes/projects.py's
+    # generate_preview_endpoint) — never persisted to the database. When
+    # it names a dashboard-style recommendation, build a dashboard spec
+    # and a STRUCTURALLY different section order (build_task_dashboard_
+    # sections), completely bypassing the normal website spec/sections
+    # path — this is what stops "داشبورد ساده وظایف" from rendering as
+    # a generic marketing website.
+    archetype = understanding.get("confirmed_preview_archetype")
+    if archetype == "task_dashboard_mockup":
+        spec = _task_dashboard_spec(raw_text)
+        sections = build_task_dashboard_sections(spec)
+        global_style = {
+            "primary_color": spec.get("color", "#4F46E5"),
+            "secondary_color": spec.get("color2", "#818CF8"),
+            "border_radius": "14px",
+            "font_family": "Tahoma,Arial,sans-serif",
+            "theme": "default",
+        }
+        html = render_website(sections, global_style)
+        return {
+            "preview_data": {
+                "scenario": scenario,
+                "website_intent": website_intent,
+                "title": spec["name"],
+                "subtitle": spec["tagline"],
+                "product_type": spec["type"],
+                "sections": spec["nav_items"],
+                "features": spec.get("features", []),
+                "html_preview": html,
+                "_is_html_preview": True,
+                "section_blocks": sections,
+                "global_style": global_style,
+                "inspiration_style_name": None,
+            },
+            "change_summary": [
+                f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
+                f"نوع محصول: {spec['type']}",
+                "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
+            ],
+            "known_limitations": [
+                "این پیش‌نمایش اولیه است، نه یک سیستم مدیریت پروژه واقعی",
+                "افزودن کار/جلسه در این نسخه فقط نمایشی است؛ ذخیره واقعی هنوز فعال نیست",
+            ],
+        }
+
+    # The remaining 4 archetypes all still use the normal
+    # build_sections_from_spec() website-section model (menu_grid +
+    # gallery + about + benefits + form + cta), but with a SPEC built
+    # explicitly for the confirmed archetype — bypassing scenario/
+    # website_intent detection entirely. This is the fix for a real bug
+    # found while testing this puzzle: scenario detection happens in an
+    # EARLIER, separate call (POST /understanding) and can legitimately
+    # guess wrong (e.g. "بات یا سایت" wording got misread as a totally
+    # unrelated booking/salon scenario) — once the user has explicitly
+    # confirmed a specific recommendation, that confirmation must win,
+    # not the earlier guess.
+    _ARCHETYPE_SPEC_BUILDERS = {
+        "product_catalog_order_page": lambda: _store_spec(raw_text),
+        "digital_menu_order_page": lambda: _digital_menu_order_spec(raw_text),
+        "service_portfolio_request_page": lambda: _service_portfolio_spec(understanding.get("business_domain") or ""),
+        "lead_landing_page": lambda: _lead_landing_spec(understanding.get("business_domain") or ""),
+    }
+    if archetype in _ARCHETYPE_SPEC_BUILDERS:
+        spec = _ARCHETYPE_SPEC_BUILDERS[archetype]()
+        sections = build_sections_from_spec(spec)
+        global_style = {
+            "primary_color": spec.get("color", "#4F46E5"),
+            "secondary_color": spec.get("color2", "#818CF8"),
+            "border_radius": "14px",
+            "font_family": "Tahoma,Arial,sans-serif",
+            "theme": "default",
+        }
+        html = render_website(sections, global_style)
+        return {
+            "preview_data": {
+                "scenario": scenario,
+                "website_intent": website_intent,
+                "title": spec["name"],
+                "subtitle": spec["tagline"],
+                "product_type": spec["type"],
+                "sections": spec["nav_items"],
+                "features": spec.get("features", []),
+                "html_preview": html,
+                "_is_html_preview": True,
+                "section_blocks": sections,
+                "global_style": global_style,
+                "inspiration_style_name": None,
+            },
+            "change_summary": [
+                f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
+                f"نوع محصول: {spec['type']}",
+                "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
+            ],
+            "known_limitations": [
+                "این پیش‌نمایش اولیه است، نه محصول نهایی آماده",
+                "محتوای واقعی و تصاویر در مراحل بعد اضافه می‌شود",
+            ],
+        }
+
     spec = _build_spec(scenario, understanding, website_intent, raw_text)
 
     # New editable section-block model — single source of truth going forward.
@@ -89,6 +194,135 @@ def generate(
             "این پیش‌نمایش اولیه است، نه محصول نهایی آماده",
             "محتوای واقعی و تصاویر در مراحل بعد اضافه می‌شود",
         ],
+    }
+
+
+# ── Task Dashboard Mockup spec (Puzzle: preview product-type awareness) ────
+
+def _task_dashboard_spec(raw_text: str = "") -> dict:
+    """
+    Builds a dashboard-style spec — completely separate from the
+    website _build_spec()/_*_spec() family below. No menu_items,
+    no gallery, no benefits-as-marketing — just enough fields for
+    build_task_dashboard_sections() to render a task/meeting mockup.
+
+    Mockup task/meeting content is static placeholder data for this
+    first version (per "make the smallest safe change possible" — no
+    real task storage/backend yet, consistent with known_limitations
+    in generate()'s dashboard branch above).
+    """
+    is_meetings_focused = any(k in (raw_text or "") for k in ["جلسات", "جلسه", "میتینگ"])
+
+    return {
+        "name": "داشبورد کارهای اداری" if is_meetings_focused else "داشبورد ساده وظایف",
+        "tagline": "نمای ساده از کارها و وضعیتشان — یک پیش‌نمایش اولیه",
+        "type": "داشبورد ساده وظایف",
+        "color": "#2563EB",
+        "color2": "#60A5FA",
+        "nav_items": ["خانه"],
+        "features": ["نمایش وضعیت کارها", "لیست جلسات پیش رو", "افزودن کار/جلسه (نمایشی)"],
+        "dashboard_columns": [
+            {"label": "انجام نشده", "tasks": ["تهیه گزارش هفتگی", "پاسخ به ایمیل‌های معلق", "هماهنگی با تیم فروش"]},
+            {"label": "در حال انجام", "tasks": ["بررسی درخواست‌های مشتریان", "تنظیم برنامه هفته بعد"]},
+            {"label": "انجام شده", "tasks": ["ارسال فاکتور ماه قبل", "بایگانی اسناد قدیمی"]},
+        ],
+        "dashboard_meetings": [
+            {"time": "۱۰:۰۰", "title": "جلسه هماهنگی تیم"},
+            {"time": "۱۳:۳۰", "title": "بررسی وضعیت پروژه با مدیر"},
+            {"time": "۱۶:۰۰", "title": "تماس با تأمین‌کننده"},
+        ],
+    }
+
+
+def _digital_menu_order_spec(domain: str = "") -> dict:
+    """
+    Minimal "منوی دیجیتال + سفارش ساده" spec — deliberately separate
+    from _cafe_ordering_spec() (which includes a shopping cart and an
+    order-management panel, too heavy for this confirmed scope) and
+    from the generic _cafe_intro_spec(). Only menu + a simple order
+    CTA + contact — explicitly NO reservation, NO loyalty program, NO
+    "sell coffee products" e-commerce section, per the puzzle's
+    requirement that confirmed scope must not silently grow.
+    """
+    is_cafe = any(k in (domain or "") for k in ["کافه", "رستوران", "کافی‌شاپ", "کافیشاپ"])
+    return {
+        "name": "منوی دیجیتال کافه" if is_cafe else "منوی دیجیتال و سفارش ساده",
+        "tagline": "منو را ببین، سریع سفارش بده",
+        "type": "منوی دیجیتال و سفارش ساده",
+        "color": "#C2410C",
+        "color2": "#FB923C",
+        "hero_btn": "مشاهده منو",
+        "hero_btn2": "ثبت سفارش ساده",
+        "nav_items": ["خانه", "منو", "سفارش", "تماس"],
+        "features": ["دسته‌بندی منو", "قیمت هر آیتم", "سفارش ساده", "راه تماس برای سفارش"],
+        "menu_items": [
+            {"icon": "☕", "name": "اسپرسو", "desc": "دان تازه آسیاب‌شده", "price": "۳۵,۰۰۰"},
+            {"icon": "🥤", "name": "آیس‌لاته", "desc": "خنک و انرژی‌بخش", "price": "۴۵,۰۰۰"},
+            {"icon": "🍰", "name": "کیک شکلاتی", "desc": "دستپخت روزانه", "price": "۴۰,۰۰۰"},
+            {"icon": "🥐", "name": "کروسان", "desc": "تازه و ترد", "price": "۳۰,۰۰۰"},
+        ],
+        "why_us": [
+            {"icon": "⚡", "title": "سفارش ساده", "desc": "بدون پیچیدگی، فقط چند کلیک"},
+            {"icon": "❤️", "title": "طعم اصیل", "desc": "دستور پخت اختصاصی"},
+        ],
+        "about": "منوی کامل را ببین و سفارشت را به‌سادگی ثبت کن.",
+    }
+
+
+def _service_portfolio_spec(domain: str = "") -> dict:
+    """
+    Minimal "صفحه نمونه‌کار + فرم درخواست سفارش" spec — portfolio cards
+    (using the same menu_grid section/renderer, since it already
+    supports image/title/desc cards) + a request/contact form.
+    Explicitly NO unrelated shop/product/booking sections.
+    """
+    name = domain if domain and len(domain) <= 24 else "نمونه‌کارهای ما"
+    return {
+        "name": name,
+        "tagline": "نمونه کارهای قبلی را ببین، بعد درخواست بده",
+        "type": "صفحه نمونه‌کار و فرم درخواست سفارش",
+        "color": "#7C3AED",
+        "color2": "#A78BFA",
+        "hero_btn": "مشاهده نمونه‌کارها",
+        "hero_btn2": "ثبت درخواست",
+        "nav_items": ["خانه", "نمونه‌کارها", "درخواست سفارش", "تماس"],
+        "features": ["گالری نمونه‌کارها", "فرم درخواست سفارش", "اطلاعات تماس"],
+        "menu_items": [
+            {"icon": "✂️", "name": "نمونه‌کار ۱", "desc": "توضیح کوتاه نمونه‌کار", "price": ""},
+            {"icon": "🧵", "name": "نمونه‌کار ۲", "desc": "توضیح کوتاه نمونه‌کار", "price": ""},
+            {"icon": "👗", "name": "نمونه‌کار ۳", "desc": "توضیح کوتاه نمونه‌کار", "price": ""},
+        ],
+        "why_us": [
+            {"icon": "✅", "title": "کیفیت کار", "desc": "نمونه‌کارهای واقعی قبل از سفارش"},
+            {"icon": "📝", "title": "درخواست ساده", "desc": "فقط فرم را پر کن، بقیه را بسپار به ما"},
+        ],
+        "about": "قبل از سفارش، نمونه کارهای قبلی را ببین و بعد با فرم ساده درخواست بده.",
+    }
+
+
+def _lead_landing_spec(domain: str = "") -> dict:
+    """
+    Minimal "صفحه جذب مشتری جدید" spec — hero + benefit + CTA +
+    contact/location, no shop/order/booking content by default (those
+    only get added if the user explicitly confirms them later).
+    """
+    name = domain if domain and len(domain) <= 24 else "معرفی کسب‌وکار"
+    return {
+        "name": name,
+        "tagline": "مشتری جدید را در چند ثانیه جذب کن",
+        "type": "صفحه جذب مشتری جدید",
+        "color": "#0F766E",
+        "color2": "#2DD4BF",
+        "hero_btn": "اطلاعات بیشتر",
+        "hero_btn2": "تماس بگیر",
+        "nav_items": ["خانه", "درباره ما", "تماس"],
+        "features": ["معرفی کوتاه و جذاب", "دعوت به اقدام واضح", "اطلاعات تماس"],
+        "menu_items": [],
+        "why_us": [
+            {"icon": "⭐", "title": "چرا ما", "desc": "یک دلیل ساده و قانع‌کننده"},
+            {"icon": "📍", "title": "دسترسی آسان", "desc": "آدرس و راه تماس مشخص"},
+        ],
+        "about": "معرفی کوتاهی از کسب‌وکار، برای اینکه مشتری جدید سریع تصمیم بگیرد.",
     }
 
 
