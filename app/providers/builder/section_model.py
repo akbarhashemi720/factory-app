@@ -115,7 +115,7 @@ def build_sections_from_spec(spec: dict[str, Any]) -> list[dict[str, Any]]:
         # apart from everything else (cafe, education, generic store, ...).
         # Only that specific case gets food/order wording — every other
         # template keeps the existing generic title/button untouched.
-        is_homemade_food_store = spec.get("type") == "کاتالوگ و سفارش محصولات خانگی"
+        is_homemade_food_store = spec.get("type") == "کاتالوگ محصول و سفارش ساده"
         menu_title = "محصولات قابل سفارش" if is_homemade_food_store else "پیشنهادهای ویژه"
         menu_subtitle = (
             "محصولات خانگی ما را ببین و سفارش بده"
