@@ -48,7 +48,17 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
         explanation = explanations.get(o["tool_key"])
         if explanation:
             label = f"{label} — {explanation}"
-        options.append({"option_key": o["tool_key"], "label": label})
+        # Puzzle: "Fix selected option propagation" — every option now
+        # carries its own archetype (set at the source by _opt() in
+        # need_first_advisor.py), not just the top-level recommendation.
+        # This is what lets the frontend send the CORRECT archetype to
+        # generate-preview regardless of which option the user actually
+        # clicked.
+        options.append({
+            "option_key": o["tool_key"],
+            "label": label,
+            "archetype": o.get("archetype") or "",
+        })
 
     rec_key = advice.get("factory_recommendation")
     # Prefer an explicit combo label (e.g. "جذب مشتری جدید + منوی دیجیتال")
