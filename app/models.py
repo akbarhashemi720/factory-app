@@ -338,7 +338,7 @@ class NeedFirstResponse(BaseModel):
     project_id: UUID
     understood_summary: str            # "فهمیدم مشکل اصلی تو ... است."
     framing_note: str                  # "سایت، بات، ... فقط راه‌حل هستند؛ ..."
-    options: list[dict[str, str]] = Field(default_factory=list)   # [{option_key, label}], length 0-3
+    options: list[dict[str, str]] = Field(default_factory=list)   # [{option_key, label, archetype}], length 0-3
     factory_recommendation_key: str | None = None
     factory_recommendation_label: str | None = None
     reason: str | None = None
