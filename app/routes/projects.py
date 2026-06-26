@@ -705,6 +705,7 @@ def need_first_check(
         needs_clarification=text_fields["needs_clarification"],
         clarification_question=text_fields["clarification_question"],
         clarification_options=text_fields["clarification_options"],
+        preview_archetype=text_fields["preview_archetype"],
     )
 
 
@@ -921,6 +922,16 @@ def generate_preview_endpoint(
         understanding["raw_text"] = (
             f"{understanding.get('raw_text') or ''} {body.confirmed_recommendation_scope}"
         ).strip()
+
+    # Same in-memory-only pattern, for the preview archetype routing tag
+    # (e.g. "task_dashboard_mockup") — lets html_builder.py render the
+    # CORRECT KIND of mockup (dashboard/catalog/menu/portfolio/landing)
+    # instead of always falling back to a generic marketing website.
+    # Never persisted; app/services/builder.py forwards `understanding`
+    # unchanged to whichever provider is configured, so this reaches the
+    # builder without any change to that dispatch layer.
+    if body and body.confirmed_preview_archetype:
+        understanding["confirmed_preview_archetype"] = body.confirmed_preview_archetype
 
     # ── Builder ───────────────────────────────────────────────────────────────
     _update_project(db, project_id, {"status": "building"})
