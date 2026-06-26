@@ -24,6 +24,7 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
             "needs_clarification": True,
             "clarification_question": advice.get("clarification_question") or "",
             "clarification_options": list(advice.get("clarification_options") or []),
+            "preview_archetype": None,
         }
 
     pain = advice.get("detected_pain_or_goal") or "نیاز کسب‌وکارت"
@@ -68,4 +69,5 @@ def build_need_first_text(advice: dict[str, Any]) -> dict[str, Any]:
         "needs_clarification": False,
         "clarification_question": None,
         "clarification_options": [],
+        "preview_archetype": advice.get("preview_archetype"),
     }
