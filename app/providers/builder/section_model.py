@@ -331,6 +331,50 @@ def build_crm_followup_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return sections
 
 
+def build_team_task_board_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Dedicated section order for the team_task_board_mockup preview
+    archetype (Legacy Replacement Sprint, Phase 4). Deliberately its own
+    archetype now, not a shared variant of task_dashboard_mockup — main
+    content is per-person task assignment (member name, their tasks,
+    deadlines, status), not generic status-only columns and not a
+    customer follow-up list.
+
+      1. Simple navbar
+      2. Small hero (title/subtitle only)
+      3. Team task board — the actual main content
+      4. Minimal footer
+    """
+    sections: list[dict[str, Any]] = []
+
+    sections.append(new_block("navbar", {
+        "logo_text": spec.get("name", "تقسیم وظایف تیم"),
+        "nav_items": spec.get("nav_items", ["خانه"]),
+    }))
+
+    sections.append(new_block("hero", {
+        "badge": f"پیش‌نمایش اولیه • {spec.get('type', 'تقسیم وظایف بین افراد')}",
+        "title": spec.get("name", "تقسیم وظایف تیم"),
+        "subtitle": spec.get("tagline", ""),
+        "primary_button": "",
+        "secondary_button": "",
+    }))
+
+    sections.append(new_block("team_task_board", {
+        "title": "اعضای تیم و کارهای هرکس",
+        "subtitle": "هر کار مال کیست، با چه مهلت و وضعیتی — این فقط یک پیش‌نمایش اولیه است",
+        "team_members": spec.get("team_members", []),
+        "team_meetings": spec.get("team_meetings", []),
+    }))
+
+    sections.append(new_block("footer", {
+        "site_name": spec.get("name", "تقسیم وظایف تیم"),
+        "tagline": "این یک پیش‌نمایش اولیه است، نه یک سیستم مدیریت پروژه کامل",
+    }))
+
+    return sections
+
+
 def apply_section_edit(sections: list[dict[str, Any]], section_id: str,
                         field_key: str, new_value: Any) -> list[dict[str, Any]]:
     """Update one content field on one section, return the new sections list."""
