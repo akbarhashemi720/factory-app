@@ -241,8 +241,13 @@ def _render_menu_grid(sid: str, c: dict, color: str, color2: str, overrides: dic
         img_html = _el(sid, f"{item_id}-img", "image", item.get('icon', '✨'),
                         f'<div class="m-img"{img_box_style} data-box-id="{img_box_id}">{item.get("icon","✨")}</div>',
                         "ed-el-block", overrides, item_id)
-        btn_html = _el(sid, f"{item_id}-btn", "button", "انتخاب",
-                        '<button class="m-btn">انتخاب</button>', "ed-el-inline", overrides, item_id)
+        # card_button_label is set per-spec-type in section_model.py
+        # (e.g. "افزودن به سفارش" for homemade-food/order stores). Falls
+        # back to the original generic label for every template that
+        # doesn't set it, so nothing else changes.
+        btn_label = c.get("card_button_label", "انتخاب")
+        btn_html = _el(sid, f"{item_id}-btn", "button", btn_label,
+                        f'<button class="m-btn">{btn_label}</button>', "ed-el-inline", overrides, item_id)
 
         # "رنگ زمینه" on a card title/desc must color the whole VISIBLE
         # card container (.m-card), not just a thin strip behind the text
@@ -271,6 +276,66 @@ def _render_menu_grid(sid: str, c: dict, color: str, color2: str, overrides: dic
       {title_html}
       {subtitle_html}
       <div class="menu-grid">{cards}</div>
+    </div>"""
+
+
+def _render_task_dashboard(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
+    """
+    Task Dashboard Mockup (Puzzle: preview product-type awareness).
+
+    A genuinely different visual archetype from the marketing-website
+    sections above: status columns of task cards + an upcoming-meetings
+    list + two simple action buttons. No gallery/offers/services/about —
+    this section IS the main content for dashboard-style recommendations
+    (e.g. "داشبورد ساده وظایف + جلسات").
+
+    Still uses _el() for the title/subtitle/buttons so basic click-to-edit
+    keeps working, matching the existing editing model — task card text
+    itself is treated as static mockup content for this first version
+    (no per-card editing yet), consistent with "smallest safe change".
+    """
+    title = c.get("title", "")
+    subtitle = c.get("subtitle", "")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
+
+    status_cols_html = ""
+    for col in c.get("status_columns", []):
+        cards_html = "".join(
+            f'<div class="dash-task-card"><div class="dash-task-name">{task}</div></div>'
+            for task in col.get("tasks", [])
+        )
+        status_cols_html += f"""
+        <div class="dash-col">
+          <div class="dash-col-title">{col.get("label", "")}</div>
+          {cards_html}
+        </div>"""
+
+    meetings_html = "".join(
+        f"""<div class="dash-meeting-row">
+              <div class="dash-meeting-time">{m.get("time", "")}</div>
+              <div class="dash-meeting-title">{m.get("title", "")}</div>
+            </div>"""
+        for m in c.get("upcoming_meetings", [])
+    )
+
+    add_task_btn = c.get("add_task_button", "افزودن کار")
+    add_meeting_btn = c.get("add_meeting_button", "افزودن جلسه")
+    add_task_html = _el(sid, f"{sid}-add-task", "button", add_task_btn,
+                         f'<button class="m-btn">{add_task_btn}</button>', "ed-el-inline", overrides)
+    add_meeting_html = _el(sid, f"{sid}-add-meeting", "button", add_meeting_btn,
+                            f'<button class="m-btn dash-btn-secondary">{add_meeting_btn}</button>', "ed-el-inline", overrides)
+
+    return f"""
+    <div class="section dash-section"{_bg_style_attr(section_bg)}>
+      {title_html}
+      {subtitle_html}
+      <div class="dash-toolbar">{add_task_html}{add_meeting_html}</div>
+      <div class="dash-board">{status_cols_html}</div>
+      <div class="dash-meetings-wrap">
+        <div class="dash-meetings-title">جلسات پیش رو</div>
+        {meetings_html if meetings_html else '<div class="dash-empty">جلسه‌ای ثبت نشده</div>'}
+      </div>
     </div>"""
 
 
@@ -462,6 +527,7 @@ _RENDERERS = {
     "navbar": _render_navbar,
     "hero": _render_hero,
     "menu_grid": _render_menu_grid,
+    "task_dashboard": _render_task_dashboard,
     "gallery": _render_gallery,
     "about": _render_about,
     "benefits": _render_benefits,
@@ -480,6 +546,7 @@ SECTION_TYPE_LABEL_FA = {
     "navbar": "هدر و منو",
     "hero": "بخش اصلی سایت",
     "menu_grid": "بخش منو",
+    "task_dashboard": "بخش داشبورد وظایف",
     "gallery": "گالری تصاویر",
     "about": "بخش درباره ما",
     "benefits": "بخش چرا ما را انتخاب کنید",
@@ -562,6 +629,24 @@ _BASE_CSS = """
 
   footer {{ background:#241C1C; color:#a89b94; padding:32px 24px; text-align:center; font-size:0.82rem; }}
   footer .footer-logo {{ color:#fff; font-weight:700; margin-bottom:10px; font-size:1.05rem; }}
+
+  /* ── Task Dashboard Mockup (Puzzle: preview product-type awareness) ──
+     Deliberately NOT marketing-website styling — flat panels, status
+     columns, a simple meetings list. */
+  .dash-section {{ background:#F4F6F8; }}
+  .dash-toolbar {{ display:flex; gap:12px; justify-content:center; margin-bottom:30px; flex-wrap:wrap; }}
+  .dash-btn-secondary {{ background:#fff !important; color:{color} !important; border:1.5px solid {color}55 !important; }}
+  .dash-board {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; margin-bottom:32px; }}
+  .dash-col {{ background:#fff; border-radius:{radius}; padding:16px; box-shadow:0 2px 10px rgba(45,36,36,0.06); }}
+  .dash-col-title {{ font-weight:700; font-size:0.88rem; color:#4a3f3a; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid {color}33; }}
+  .dash-task-card {{ background:#FAFAFA; border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:0.84rem; color:#2D2424; box-shadow:0 1px 4px rgba(0,0,0,0.05); }}
+  .dash-meetings-wrap {{ background:#fff; border-radius:{radius}; padding:22px; box-shadow:0 2px 10px rgba(45,36,36,0.06); max-width:640px; margin:0 auto; }}
+  .dash-meetings-title {{ font-weight:700; font-size:0.92rem; margin-bottom:14px; color:#2D2424; }}
+  .dash-meeting-row {{ display:flex; gap:14px; padding:9px 0; border-bottom:1px solid #ECE2D6; font-size:0.85rem; }}
+  .dash-meeting-row:last-child {{ border-bottom:none; }}
+  .dash-meeting-time {{ color:{color}; font-weight:700; min-width:56px; }}
+  .dash-meeting-title {{ color:#4a3f3a; }}
+  .dash-empty {{ color:#8a7a6e; font-size:0.84rem; text-align:center; padding:8px 0; }}
 """
 
 # ── Luxury theme override (cafe_luxury_premium) ─────────────────────────────
