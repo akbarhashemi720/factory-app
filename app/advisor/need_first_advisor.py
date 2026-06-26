@@ -117,11 +117,247 @@ _TOOL_ARCHETYPES: dict[str, str] = {
 }
 
 
-def _opt(tool_key: str) -> dict[str, str]:
+# ── Proposed sections per tool_key (THE fix for "empty fake recommendation
+# detail screens") ────────────────────────────────────────────────────────
+# Puzzle: "Fix empty fake recommendation detail screens". Previously the
+# confirmation screen ("این بخش‌ها را پیشنهاد می‌کنم") showed whatever
+# `bullets` happened to come back from the OLD website-section
+# understanding call — which is empty for need-first-confirmed options
+# that never reach that old flow. Every selectable tool_key now has a
+# guaranteed, specific, non-empty list of proposed sections here, scoped
+# to exactly what that option means (e.g. "تقسیم وظایف بین افراد" gets
+# team/assignment-focused sections, NOT the same list as "داشبورد کارها
+# و جلسات", even though both currently share the task_dashboard_mockup
+# archetype under the hood).
+_PROPOSED_SECTIONS_BY_TOOL_KEY: dict[str, list[str]] = {
+    "task_dashboard": [
+        "کارهای امروز",
+        "جلسات آینده",
+        "وضعیت کارها (انجام‌نشده/در حال انجام/انجام‌شده)",
+        "تقویم و یادآوری‌ها",
+        "افزودن کار یا جلسه",
+    ],
+    "simple_task_dashboard_goal": [
+        "کارهای امروز",
+        "وضعیت کارها (انجام‌نشده/در حال انجام/انجام‌شده)",
+        "افزودن کار جدید",
+    ],
+    "team_task_board": [
+        "اعضای تیم و مسئول هر کار",
+        "لیست کارهای هر نفر",
+        "وضعیت انجام کارها",
+        "مهلت‌ها و یادآوری‌ها",
+        "جلسات مرتبط با تیم",
+    ],
+    "client_followup_list": [
+        "نام مشتری",
+        "وضعیت پیگیری",
+        "آخرین تماس یا پیام",
+        "اقدام بعدی",
+        "یادآوری پیگیری",
+    ],
+    "customer_followup_list": [
+        "نام مشتری",
+        "وضعیت پیگیری",
+        "آخرین تماس یا پیام",
+        "اقدام بعدی",
+    ],
+    "returning_customer_tool": [
+        "نام مشتری",
+        "آخرین خرید/مراجعه",
+        "یادآوری برگشت مشتری",
+    ],
+    "customer_followup": [
+        "نام مشتری",
+        "وضعیت پیگیری",
+        "یادآوری پیگیری بعدی",
+    ],
+    "contact_or_booking_form": [
+        "نام و شماره تماس",
+        "انتخاب خدمت یا موضوع",
+        "انتخاب زمان پیشنهادی",
+        "پیام کوتاه مشتری",
+        "دکمه ارسال درخواست",
+    ],
+    "measurement_booking": [
+        "نام و شماره تماس",
+        "انتخاب روز و ساعت اندازه‌گیری",
+        "پیام کوتاه مشتری",
+        "دکمه ثبت درخواست نوبت",
+    ],
+    "simple_finance_dashboard": [
+        "خلاصه درآمد و هزینه",
+        "جمع‌بندی ماهانه",
+        "افزودن تراکنش جدید",
+    ],
+    "income_order_log": [
+        "لیست سفارش‌ها",
+        "میزان درآمد هر سفارش",
+        "جمع‌بندی دوره‌ای",
+    ],
+    "simple_periodic_report": [
+        "گزارش روزانه",
+        "گزارش هفتگی",
+        "نمودار ساده روند",
+    ],
+    "catalog_order": [
+        "نمایش محصولات با عکس و قیمت",
+        "توضیح کوتاه هر محصول",
+        "فرم سفارش ساده",
+        "راه تماس برای سفارش",
+    ],
+    "quick_order_form": [
+        "نام محصول",
+        "تعداد سفارش",
+        "اطلاعات تماس",
+        "دکمه ارسال سفارش",
+    ],
+    "brand_intro_page": [
+        "معرفی کوتاه برند",
+        "نمونه محصولات",
+        "راه ارتباط با فروشنده",
+    ],
+    "digital_menu_order": [
+        "دسته‌بندی منو",
+        "قیمت هر آیتم",
+        "فرم سفارش ساده",
+        "راه تماس برای سفارش",
+    ],
+    "digital_menu_order_goal": [
+        "دسته‌بندی منو",
+        "قیمت هر آیتم",
+        "ثبت سفارش ساده",
+    ],
+    "digital_menu_simple_order": [
+        "دسته‌بندی منو",
+        "قیمت هر آیتم",
+        "ثبت سفارش ساده",
+    ],
+    "digital_menu_fast_decision": [
+        "دسته‌بندی منو با عکس",
+        "قیمت هر آیتم",
+        "دکمه تماس سریع",
+    ],
+    "simple_order_bot": [
+        "خوش‌آمدگویی و معرفی منو",
+        "انتخاب آیتم سفارش",
+        "تأیید نهایی سفارش",
+    ],
+    "portfolio_request_form": [
+        "نمونه‌کارهای قبلی",
+        "توضیح کوتاه هر نمونه‌کار",
+        "فرم درخواست سفارش",
+        "اطلاعات تماس",
+    ],
+    "service_price_intro": [
+        "لیست خدمات",
+        "قیمت حدودی هر خدمت",
+        "راه تماس",
+    ],
+    "order_request_form": [
+        "نوع درخواست/سفارش",
+        "توضیح کوتاه درخواست",
+        "اطلاعات تماس",
+    ],
+    "walkin_landing": [
+        "معرفی کوتاه و جذاب",
+        "آدرس و نحوه دسترسی",
+        "دعوت به حضور",
+    ],
+    "new_customer_acquisition": [
+        "معرفی کوتاه کسب‌وکار",
+        "یک دلیل قانع‌کننده برای انتخاب",
+        "آدرس و راه تماس",
+        "دعوت به اقدام",
+    ],
+    "special_offer_landing": [
+        "معرفی پیشنهاد ویژه",
+        "مدت زمان پیشنهاد",
+        "دعوت به اقدام",
+    ],
+    "customer_landing_offer": [
+        "عکس و معرفی کوتاه",
+        "آدرس",
+        "پیشنهاد ویژه",
+    ],
+    "cafe_intro_site": [
+        "معرفی فضای کافه",
+        "عکس‌های فضا",
+        "آدرس و تماس",
+    ],
+    "cafe_intro_menu_site": [
+        "معرفی کافه",
+        "منوی دیجیتال",
+        "آدرس و تماس",
+    ],
+}
+
+# Archetype-level fallback (when a tool_key has no specific entry above,
+# but its archetype does) — keeps the guarantee that EVERY selectable
+# option produces a non-empty, archetype-appropriate section list.
+_PROPOSED_SECTIONS_BY_ARCHETYPE: dict[str, list[str]] = {
+    "task_dashboard_mockup": [
+        "کارهای امروز",
+        "وضعیت کارها",
+        "افزودن کار جدید",
+    ],
+    "simple_crm_followup_mockup": [
+        "نام مشتری",
+        "وضعیت پیگیری",
+        "یادآوری پیگیری بعدی",
+    ],
+    "booking_page_mockup": [
+        "نام و شماره تماس",
+        "انتخاب خدمت یا موضوع",
+        "انتخاب زمان پیشنهادی",
+        "دکمه ارسال درخواست",
+    ],
+    "product_catalog_order_page": [
+        "نمایش محصولات",
+        "قیمت و توضیح کوتاه",
+        "فرم سفارش ساده",
+    ],
+    "digital_menu_order_page": [
+        "دسته‌بندی منو",
+        "قیمت هر آیتم",
+        "ثبت سفارش ساده",
+    ],
+    "service_portfolio_request_page": [
+        "نمونه‌کارهای قبلی",
+        "فرم درخواست سفارش",
+        "اطلاعات تماس",
+    ],
+    "lead_landing_page": [
+        "معرفی کوتاه",
+        "دعوت به اقدام",
+        "اطلاعات تماس",
+    ],
+}
+
+
+def get_proposed_sections(tool_key: str | None, archetype: str | None) -> list[str]:
+    """
+    Returns a guaranteed non-empty list of proposed sections (3-5 items)
+    for a given selected option, or an empty list only if BOTH the
+    tool_key and the archetype are unrecognized — in which case the
+    caller must show the safe fallback message instead of a confirm
+    screen with nothing in it (Puzzle requirement: never let the user
+    confirm an empty recommendation).
+    """
+    if tool_key and tool_key in _PROPOSED_SECTIONS_BY_TOOL_KEY:
+        return list(_PROPOSED_SECTIONS_BY_TOOL_KEY[tool_key])
+    if archetype and archetype in _PROPOSED_SECTIONS_BY_ARCHETYPE:
+        return list(_PROPOSED_SECTIONS_BY_ARCHETYPE[archetype])
+    return []
+
+
+def _opt(tool_key: str) -> dict[str, Any]:
+    archetype = _TOOL_ARCHETYPES.get(tool_key)
     return {
         "tool_key": tool_key,
         "label": _TOOL_LABELS_FA[tool_key],
-        "archetype": _TOOL_ARCHETYPES.get(tool_key),
+        "archetype": archetype,
+        "proposed_sections": get_proposed_sections(tool_key, archetype),
     }
 
 
@@ -455,7 +691,12 @@ def get_goal_based_recommendation(raw_text: str, goal_label: str) -> dict[str, A
         "business_context": "کافه" if is_cafe else None,
         "user_named_tool_if_any": None,
         "recommended_options": [
-            {"tool_key": o["tool_key"], "label": o["label"], "archetype": _TOOL_ARCHETYPES.get(o["tool_key"])}
+            {
+                "tool_key": o["tool_key"],
+                "label": o["label"],
+                "archetype": _TOOL_ARCHETYPES.get(o["tool_key"]),
+                "proposed_sections": get_proposed_sections(o["tool_key"], _TOOL_ARCHETYPES.get(o["tool_key"])),
+            }
             for o in entry["recommended_options"]
         ],
         "recommended_options_explanations": {
