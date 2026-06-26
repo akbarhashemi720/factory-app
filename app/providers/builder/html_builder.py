@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import Any
 from app.providers.builder.section_model import (
     build_sections_from_spec, build_luxury_cafe_sections, build_task_dashboard_sections,
+    build_crm_followup_sections,
 )
 from app.providers.builder.render_sections import render_website
 from app.inspiration.selector import pick_default_reference
@@ -91,6 +92,43 @@ def generate(
             "known_limitations": [
                 "این پیش‌نمایش اولیه است، نه یک سیستم مدیریت پروژه واقعی",
                 "افزودن کار/جلسه در این نسخه فقط نمایشی است؛ ذخیره واقعی هنوز فعال نیست",
+            ],
+        }
+
+    if archetype == "simple_crm_followup_mockup":
+        spec = _crm_followup_spec(raw_text)
+        sections = build_crm_followup_sections(spec)
+        global_style = {
+            "primary_color": spec.get("color", "#4F46E5"),
+            "secondary_color": spec.get("color2", "#818CF8"),
+            "border_radius": "14px",
+            "font_family": "Tahoma,Arial,sans-serif",
+            "theme": "default",
+        }
+        html = render_website(sections, global_style)
+        return {
+            "preview_data": {
+                "scenario": scenario,
+                "website_intent": website_intent,
+                "title": spec["name"],
+                "subtitle": spec["tagline"],
+                "product_type": spec["type"],
+                "sections": spec["nav_items"],
+                "features": spec.get("features", []),
+                "html_preview": html,
+                "_is_html_preview": True,
+                "section_blocks": sections,
+                "global_style": global_style,
+                "inspiration_style_name": None,
+            },
+            "change_summary": [
+                f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
+                f"نوع محصول: {spec['type']}",
+                "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
+            ],
+            "known_limitations": [
+                "این پیش‌نمایش اولیه است، نه یک سیستم CRM واقعی",
+                "ثبت/ویرایش واقعی مشتری در این نسخه هنوز فعال نیست",
             ],
         }
 
@@ -326,6 +364,33 @@ def _lead_landing_spec(domain: str = "") -> dict:
     }
 
 
+def _crm_followup_spec(raw_text: str = "") -> dict:
+    """
+    Minimal "لیست پیگیری مشتری‌ها" spec (simple_crm_followup_mockup
+    archetype) — Puzzle: "Fix selected option propagation". Genuinely
+    different content from _task_dashboard_spec(): a customer list with
+    follow-up status/last-contact/next-step, NOT a task/meeting board,
+    and NOT a salon booking page. Static mockup data only — no real
+    CRM storage yet, consistent with the rest of this builder's
+    "smallest safe change" mockups.
+    """
+    return {
+        "name": "لیست پیگیری مشتری‌ها",
+        "tagline": "نمای ساده از مشتری‌ها و مرحله پیگیری هرکدام — یک پیش‌نمایش اولیه",
+        "type": "لیست پیگیری مشتری‌ها",
+        "color": "#9333EA",
+        "color2": "#C084FC",
+        "nav_items": ["خانه"],
+        "features": ["لیست مشتری‌ها", "وضعیت پیگیری هرکدام", "آخرین تماس/پیام", "یادآوری پیگیری بعدی"],
+        "crm_customers": [
+            {"name": "آقای رضایی", "status": "در حال پیگیری", "last_contact": "۲ روز پیش", "next_step": "تماس یادآوری"},
+            {"name": "خانم احمدی", "status": "منتظر پاسخ", "last_contact": "دیروز", "next_step": "ارسال پیشنهاد قیمت"},
+            {"name": "شرکت آرمان", "status": "پیگیری شده", "last_contact": "۵ روز پیش", "next_step": "تماس نهایی"},
+            {"name": "آقای کریمی", "status": "مشتری جدید", "last_contact": "امروز", "next_step": "تماس معرفی"},
+        ],
+    }
+
+
 # ── Spec builder ───────────────────────────────────────────────────────────────
 
 _CAFE_INTENTS = {
@@ -355,7 +420,7 @@ def _build_spec(scenario: str, und: dict, website_intent: str | None = None,
         "cooking_education":           _education_spec(signal_text),
         "children_english_education":  _education_spec(signal_text),
         "education_website":           _education_spec(signal_text),
-        "service_booking":             _booking_spec(),
+        "service_booking":             _booking_spec(domain=signal_text),
     }
 
     spec = INTENT_SPECS.get(intent)
@@ -364,8 +429,8 @@ def _build_spec(scenario: str, und: dict, website_intent: str | None = None,
         SPECS = {
             "restaurant": _cafe_intro_spec(),
             "general_class": _education_spec(signal_text),
-            "booking": _booking_spec(),
-            "telegram_bot": _booking_spec(bot=True),
+            "booking": _booking_spec(domain=signal_text),
+            "telegram_bot": _booking_spec(bot=True, domain=signal_text),
             "store": _store_spec(signal_text),
         }
         spec = SPECS.get(scenario, _general_spec())
@@ -665,9 +730,22 @@ def _education_spec(domain: str = ""):
     }
 
 
-def _booking_spec(bot=False):
+def _booking_spec(bot=False, domain: str = ""):
+    """
+    Generic appointment-booking website/bot. Puzzle: "Fix selected
+    option propagation" flagged this function's hardcoded "آرایشگاه
+    سلطانی" (a specific salon name + haircut/beard service menu) as a
+    stale fallback that appeared regardless of actual user context.
+    Now uses a neutral name unless the user's own business_domain text
+    actually mentions a salon/beauty business — never invents a fake
+    business identity for unrelated requests.
+    """
+    is_salon = any(k in (domain or "") for k in ["آرایشگاه", "سالن زیبایی", "آرایش"])
+    default_name = "آرایشگاه شما" if is_salon else "سیستم رزرو نوبت شما"
+    name = domain if domain and len(domain) <= 24 else default_name
+
     return {
-        "name": "آرایشگاه سلطانی" if not bot else "ربات رزرو هوشمند",
+        "name": name if not bot else "ربات رزرو هوشمند",
         "tagline": "نوبت بگیر، بدون معطلی، بدون تماس",
         "type": "سیستم رزرو نوبت" if not bot else "ربات رزرو نوبت",
         "color": "#0E7490",
@@ -683,13 +761,16 @@ def _booking_spec(bot=False):
             {"icon":"💇","name":"رنگ مو","desc":"محصولات بدون آمونیاک","price":"۹۰ دقیقه"},
             {"icon":"🪒","name":"اصلاح صورت","desc":"پاکسازی و اصلاح کامل","price":"۲۵ دقیقه"},
             {"icon":"👔","name":"پکیج داماد","desc":"کامل: مو، ریش، پاکسازی","price":"۱۲۰ دقیقه"},
+        ] if is_salon else [
+            {"icon": "📅", "name": "نوبت ۱", "desc": "توضیح کوتاه خدمت", "price": ""},
+            {"icon": "📅", "name": "نوبت ۲", "desc": "توضیح کوتاه خدمت", "price": ""},
+            {"icon": "📅", "name": "نوبت ۳", "desc": "توضیح کوتاه خدمت", "price": ""},
         ],
         "why_us": [
             {"icon":"⏱️","title":"بدون معطلی","desc":"رزرو دقیق، بدون انتظار"},
             {"icon":"📱","title":"یادآور خودکار","desc":"پیام یادآوری قبل از نوبت"},
-            {"icon":"⭐","title":"کیفیت تضمینی","desc":"آرایشگران حرفه‌ای و مجرب"},
         ],
-        "about": "با بیش از ده سال تجربه، بهترین خدمات آرایشی مردانه را با کیفیت بالا و قیمت مناسب ارائه می‌دهیم.",
+        "about": "رزرو نوبت آسان و سریع، بدون نیاز به تماس تلفنی.",
     }
 
 
