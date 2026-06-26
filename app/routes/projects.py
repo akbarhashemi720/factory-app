@@ -635,7 +635,21 @@ def get_recommendation(project_id: UUID, x_customer_id: Optional[str] = Header(d
 # touch the database at all beyond reading raw_text.
 
 @router.get("/{project_id}/need-first-check", response_model=NeedFirstResponse)
-def need_first_check(project_id: UUID, x_customer_id: Optional[str] = Header(default=None)):
+def need_first_check(
+    project_id: UUID,
+    goal_label: Optional[str] = None,
+    x_customer_id: Optional[str] = Header(default=None),
+):
+    """
+    goal_label is optional. When omitted, this is the FIRST-stage
+    advisor call (raw text -> goal or tool recommendation), exactly as
+    before. When provided (e.g. "فروش بیشتر"), this is the SECOND-stage
+    call made right after the user answers a goal-level clarification
+    question — it must NOT fall back to the old website-section
+    diagnostic, and must NOT call Claude/Anthropic. Both stages use the
+    same isolated, rule-based app/advisor module and the same
+    NeedFirstResponse shape, so the frontend renders them identically.
+    """
     _t_nf_start = time.perf_counter()
     db = get_db()
     _get_project_for_customer_or_404(db, project_id, x_customer_id)
@@ -664,12 +678,21 @@ def need_first_check(project_id: UUID, x_customer_id: Optional[str] = Header(def
     except Exception:
         raw_text = ""
 
-    from app.advisor.need_first_advisor import get_need_first_recommendation
+    from app.advisor.need_first_advisor import get_need_first_recommendation, get_goal_based_recommendation
     from app.advisor.need_first_text import build_need_first_text
 
-    advice = get_need_first_recommendation(raw_text)
+    if goal_label:
+        advice = get_goal_based_recommendation(raw_text, goal_label)
+        _stage = "goal-based (2nd stage)"
+    else:
+        advice = get_need_first_recommendation(raw_text)
+        _stage = "first stage"
+
     text_fields = build_need_first_text(advice)
-    logger.info("[TIMING] GET /need-first-check (rule-based advisor) took %.3fs", time.perf_counter() - _t_nf_start)
+    logger.info(
+        "[TIMING] GET /need-first-check (%s, rule-based, no Claude) took %.3fs",
+        _stage, time.perf_counter() - _t_nf_start,
+    )
 
     return NeedFirstResponse(
         project_id=project_id,
