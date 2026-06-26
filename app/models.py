@@ -347,6 +347,23 @@ class NeedFirstResponse(BaseModel):
     clarification_options: list[str] = Field(default_factory=list)
 
 
+class GeneratePreviewRequest(BaseModel):
+    """
+    Optional request body for POST /generate-preview. ALL fields are
+    optional and the body itself is optional — when omitted, behavior is
+    100% identical to before this field existed (the endpoint used to
+    take no body at all).
+
+    confirmed_recommendation_scope carries forward the need-first
+    advisor's confirmed product/tool scope (e.g. "کاتالوگ محصول و سفارش
+    ساده") so the builder's existing keyword-based wording can stay
+    honest about what was actually confirmed — frontend-state only,
+    never persisted to the database, never written to `understandings`
+    or any other table.
+    """
+    confirmed_recommendation_scope: str | None = None
+
+
 class GeneratePreviewResponse(BaseModel):
     project_id: UUID
     status: str
