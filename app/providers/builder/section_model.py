@@ -237,6 +237,56 @@ def build_luxury_cafe_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return sections
 
 
+def build_task_dashboard_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Dedicated section order for the task_dashboard_mockup preview
+    archetype (Puzzle: "Make preview product-type aware and stop
+    generic website fallback"). STRUCTURALLY different from
+    build_sections_from_spec — the main content is a single
+    `task_dashboard` section, never the marketing sections (menu_grid /
+    gallery / benefits / about / form) those use:
+
+      1. Simple navbar
+      2. Small hero (just a title/subtitle, no marketing CTAs)
+      3. Task dashboard (status columns + upcoming meetings) — the
+         actual main content
+      4. Minimal footer
+
+    spec is expected to carry dashboard_columns / dashboard_meetings —
+    see _task_dashboard_spec() in html_builder.py.
+    """
+    sections: list[dict[str, Any]] = []
+
+    sections.append(new_block("navbar", {
+        "logo_text": spec.get("name", "داشبورد کارها"),
+        "nav_items": spec.get("nav_items", ["خانه"]),
+    }))
+
+    sections.append(new_block("hero", {
+        "badge": f"پیش‌نمایش اولیه • {spec.get('type', 'داشبورد ساده وظایف')}",
+        "title": spec.get("name", "داشبورد کارها"),
+        "subtitle": spec.get("tagline", ""),
+        "primary_button": "",
+        "secondary_button": "",
+    }))
+
+    sections.append(new_block("task_dashboard", {
+        "title": "کارهای امروز",
+        "subtitle": "نمای ساده از کارها و جلسات — این فقط یک پیش‌نمایش اولیه است",
+        "status_columns": spec.get("dashboard_columns", []),
+        "upcoming_meetings": spec.get("dashboard_meetings", []),
+        "add_task_button": "افزودن کار",
+        "add_meeting_button": "افزودن جلسه",
+    }))
+
+    sections.append(new_block("footer", {
+        "site_name": spec.get("name", "داشبورد کارها"),
+        "tagline": "این یک پیش‌نمایش اولیه است، نه یک سیستم مدیریت پروژه کامل",
+    }))
+
+    return sections
+
+
 def apply_section_edit(sections: list[dict[str, Any]], section_id: str,
                         field_key: str, new_value: Any) -> list[dict[str, Any]]:
     """Update one content field on one section, return the new sections list."""
