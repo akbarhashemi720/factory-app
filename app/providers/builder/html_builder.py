@@ -22,13 +22,124 @@ editorial CSS theme (render_sections.py's theme="luxury"), instead of
 reusing the generic warm-cafe layout with different colors.
 """
 from __future__ import annotations
+import os
 from typing import Any
 from app.providers.builder.section_model import (
     build_sections_from_spec, build_luxury_cafe_sections, build_task_dashboard_sections,
-    build_crm_followup_sections,
+    build_crm_followup_sections, build_team_task_board_sections,
 )
 from app.providers.builder.render_sections import render_website
 from app.inspiration.selector import pick_default_reference
+from app.contract.product_contract import ProductContract, ContractValidationError
+
+
+class LegacyFlowBlockedError(RuntimeError):
+    """
+    Raised (Legacy Replacement Sprint, Phase 6) when need-first mode is
+    active but no valid Product Contract was provided — instead of
+    silently falling back to the legacy _build_spec() path. Carries a
+    safe Persian message for the API layer to surface; callers must
+    NEVER catch this and substitute a generic/legacy preview.
+    """
+    def __init__(self, user_message_fa: str):
+        super().__init__(user_message_fa)
+        self.user_message_fa = user_message_fa
+
+
+def _is_need_first_mode() -> bool:
+    return os.getenv("ENABLE_NEED_FIRST_RECOMMENDATION", "").lower() == "true"
+
+
+# Maps each archetype to (spec_builder, sections_builder). Centralizing
+# this table is what makes _build_archetype_preview() below a single,
+# non-duplicated code path for all 8 archetypes — Phase 4's "both
+# advisor and builder must use this same central list" extends naturally
+# into "builder has exactly one dispatch table, not one branch per
+# archetype copy-pasted".
+def _archetype_dispatch(contract: ProductContract) -> tuple[dict, list[dict]]:
+    raw_text = contract.raw_request
+    archetype = contract.preview_archetype
+
+    if archetype == "task_dashboard_mockup":
+        spec = _task_dashboard_spec(raw_text)
+        return spec, build_task_dashboard_sections(spec)
+
+    if archetype == "team_task_board_mockup":
+        spec = _team_task_board_spec(raw_text)
+        return spec, build_team_task_board_sections(spec)
+
+    if archetype == "simple_crm_followup_mockup":
+        spec = _crm_followup_spec(raw_text)
+        return spec, build_crm_followup_sections(spec)
+
+    if archetype == "product_catalog_order_page":
+        spec = _store_spec(raw_text)
+        return spec, build_sections_from_spec(spec)
+
+    if archetype == "digital_menu_order_page":
+        spec = _digital_menu_order_spec(raw_text)
+        return spec, build_sections_from_spec(spec)
+
+    if archetype == "service_portfolio_request_page":
+        spec = _service_portfolio_spec(raw_text)
+        return spec, build_sections_from_spec(spec)
+
+    if archetype == "lead_landing_page":
+        spec = _lead_landing_spec(raw_text)
+        return spec, build_sections_from_spec(spec)
+
+    if archetype == "booking_page_mockup":
+        spec = _booking_spec(domain=raw_text)
+        return spec, build_sections_from_spec(spec)
+
+    # Structurally unreachable if the contract was validated against
+    # VALID_ARCHETYPES first — but never silently substitute a guess if
+    # it somehow happens.
+    raise LegacyFlowBlockedError(
+        "برای این گزینه هنوز پیش‌نمایش آماده نشده. یک گزینه دیگر انتخاب کن یا دوباره توضیح بده."
+    )
+
+
+def _build_archetype_preview(contract: ProductContract) -> dict[str, Any]:
+    """
+    The ONLY path that produces a preview from a validated
+    ProductContract. Never reads scenario/website_intent — those legacy
+    fields cannot reach this function at all, by construction.
+    """
+    spec, sections = _archetype_dispatch(contract)
+    global_style = {
+        "primary_color": spec.get("color", "#4F46E5"),
+        "secondary_color": spec.get("color2", "#818CF8"),
+        "border_radius": "14px",
+        "font_family": "Tahoma,Arial,sans-serif",
+        "theme": "default",
+    }
+    html = render_website(sections, global_style)
+    return {
+        "preview_data": {
+            "scenario": None,
+            "website_intent": None,
+            "title": spec["name"],
+            "subtitle": spec["tagline"],
+            "product_type": spec["type"],
+            "sections": spec["nav_items"],
+            "features": spec.get("features", []),
+            "html_preview": html,
+            "_is_html_preview": True,
+            "section_blocks": sections,
+            "global_style": global_style,
+            "inspiration_style_name": None,
+        },
+        "change_summary": [
+            f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
+            f"نوع محصول: {spec['type']}",
+            "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
+        ],
+        "known_limitations": [
+            "این پیش‌نمایش اولیه است، نه محصول نهایی آماده",
+            "محتوای واقعی و تصاویر در مراحل بعد اضافه می‌شود",
+        ],
+    }
 
 
 def generate(
@@ -36,155 +147,43 @@ def generate(
     understanding: dict,
     scenario_pattern: dict | None = None,
 ) -> dict[str, Any]:
-    """Generate a rich HTML/CSS preview based on understanding."""
+    """
+    Generate a preview.
 
+    Legacy Replacement Sprint — Phase 6 (the core fix):
+    When ENABLE_NEED_FIRST_RECOMMENDATION=true, this function NEVER
+    falls back to the legacy scenario/website_intent-driven _build_spec()
+    path. It requires a validated ProductContract (built from
+    understanding["confirmed_preview_archetype"] + the other contract
+    fields, all set in-memory by generate_preview_endpoint — see
+    app/routes/projects.py). If no valid contract exists, this raises
+    LegacyFlowBlockedError — the caller must surface a clear "pick an
+    option first" message, never substitute a generic website.
+
+    When the flag is OFF, behavior is 100% unchanged from before this
+    sprint: scenario/website_intent drive _build_spec() exactly as
+    always.
+    """
+    raw_text = understanding.get("raw_text") or " ".join(understanding.get("bullets", []) or [])
+
+    if _is_need_first_mode():
+        contract = understanding.get("_product_contract")
+        if contract is None:
+            raise LegacyFlowBlockedError(
+                "برای ساخت پیش‌نمایش، اول باید یکی از گزینه‌های پیشنهادی را انتخاب کنی. "
+                "یک گزینه را انتخاب کن یا دوباره توضیح بده."
+            )
+        return _build_archetype_preview(contract)
+
+    # ── Legacy path — UNCHANGED, only reachable when need-first mode is
+    # explicitly off. scenario/website_intent drive everything below,
+    # exactly as before this sprint. ─────────────────────────────────────
     website_intent = understanding.get("website_intent")
     scenario = (
         understanding.get("detected_scenario")
         or project.get("scenario")
         or "general"
     )
-
-    raw_text = understanding.get("raw_text") or " ".join(understanding.get("bullets", []) or [])
-
-    # Preview archetype routing (Puzzle: "Make preview product-type aware
-    # and stop generic website fallback"). confirmed_preview_archetype is
-    # an in-memory-only tag carried from the need-first advisor's
-    # confirmed recommendation (see app/routes/projects.py's
-    # generate_preview_endpoint) — never persisted to the database. When
-    # it names a dashboard-style recommendation, build a dashboard spec
-    # and a STRUCTURALLY different section order (build_task_dashboard_
-    # sections), completely bypassing the normal website spec/sections
-    # path — this is what stops "داشبورد ساده وظایف" from rendering as
-    # a generic marketing website.
-    archetype = understanding.get("confirmed_preview_archetype")
-    if archetype == "task_dashboard_mockup":
-        spec = _task_dashboard_spec(raw_text)
-        sections = build_task_dashboard_sections(spec)
-        global_style = {
-            "primary_color": spec.get("color", "#4F46E5"),
-            "secondary_color": spec.get("color2", "#818CF8"),
-            "border_radius": "14px",
-            "font_family": "Tahoma,Arial,sans-serif",
-            "theme": "default",
-        }
-        html = render_website(sections, global_style)
-        return {
-            "preview_data": {
-                "scenario": scenario,
-                "website_intent": website_intent,
-                "title": spec["name"],
-                "subtitle": spec["tagline"],
-                "product_type": spec["type"],
-                "sections": spec["nav_items"],
-                "features": spec.get("features", []),
-                "html_preview": html,
-                "_is_html_preview": True,
-                "section_blocks": sections,
-                "global_style": global_style,
-                "inspiration_style_name": None,
-            },
-            "change_summary": [
-                f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
-                f"نوع محصول: {spec['type']}",
-                "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
-            ],
-            "known_limitations": [
-                "این پیش‌نمایش اولیه است، نه یک سیستم مدیریت پروژه واقعی",
-                "افزودن کار/جلسه در این نسخه فقط نمایشی است؛ ذخیره واقعی هنوز فعال نیست",
-            ],
-        }
-
-    if archetype == "simple_crm_followup_mockup":
-        spec = _crm_followup_spec(raw_text)
-        sections = build_crm_followup_sections(spec)
-        global_style = {
-            "primary_color": spec.get("color", "#4F46E5"),
-            "secondary_color": spec.get("color2", "#818CF8"),
-            "border_radius": "14px",
-            "font_family": "Tahoma,Arial,sans-serif",
-            "theme": "default",
-        }
-        html = render_website(sections, global_style)
-        return {
-            "preview_data": {
-                "scenario": scenario,
-                "website_intent": website_intent,
-                "title": spec["name"],
-                "subtitle": spec["tagline"],
-                "product_type": spec["type"],
-                "sections": spec["nav_items"],
-                "features": spec.get("features", []),
-                "html_preview": html,
-                "_is_html_preview": True,
-                "section_blocks": sections,
-                "global_style": global_style,
-                "inspiration_style_name": None,
-            },
-            "change_summary": [
-                f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
-                f"نوع محصول: {spec['type']}",
-                "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
-            ],
-            "known_limitations": [
-                "این پیش‌نمایش اولیه است، نه یک سیستم CRM واقعی",
-                "ثبت/ویرایش واقعی مشتری در این نسخه هنوز فعال نیست",
-            ],
-        }
-
-    # The remaining 4 archetypes all still use the normal
-    # build_sections_from_spec() website-section model (menu_grid +
-    # gallery + about + benefits + form + cta), but with a SPEC built
-    # explicitly for the confirmed archetype — bypassing scenario/
-    # website_intent detection entirely. This is the fix for a real bug
-    # found while testing this puzzle: scenario detection happens in an
-    # EARLIER, separate call (POST /understanding) and can legitimately
-    # guess wrong (e.g. "بات یا سایت" wording got misread as a totally
-    # unrelated booking/salon scenario) — once the user has explicitly
-    # confirmed a specific recommendation, that confirmation must win,
-    # not the earlier guess.
-    _ARCHETYPE_SPEC_BUILDERS = {
-        "product_catalog_order_page": lambda: _store_spec(raw_text),
-        "digital_menu_order_page": lambda: _digital_menu_order_spec(raw_text),
-        "service_portfolio_request_page": lambda: _service_portfolio_spec(understanding.get("business_domain") or ""),
-        "lead_landing_page": lambda: _lead_landing_spec(understanding.get("business_domain") or ""),
-    }
-    if archetype in _ARCHETYPE_SPEC_BUILDERS:
-        spec = _ARCHETYPE_SPEC_BUILDERS[archetype]()
-        sections = build_sections_from_spec(spec)
-        global_style = {
-            "primary_color": spec.get("color", "#4F46E5"),
-            "secondary_color": spec.get("color2", "#818CF8"),
-            "border_radius": "14px",
-            "font_family": "Tahoma,Arial,sans-serif",
-            "theme": "default",
-        }
-        html = render_website(sections, global_style)
-        return {
-            "preview_data": {
-                "scenario": scenario,
-                "website_intent": website_intent,
-                "title": spec["name"],
-                "subtitle": spec["tagline"],
-                "product_type": spec["type"],
-                "sections": spec["nav_items"],
-                "features": spec.get("features", []),
-                "html_preview": html,
-                "_is_html_preview": True,
-                "section_blocks": sections,
-                "global_style": global_style,
-                "inspiration_style_name": None,
-            },
-            "change_summary": [
-                f"پیش‌نمایش اولیه «{spec['name']}» آماده شد",
-                f"نوع محصول: {spec['type']}",
-                "این پیش‌نمایش اولیه است — در مراحل بعد می‌توانی تغییر دهی",
-            ],
-            "known_limitations": [
-                "این پیش‌نمایش اولیه است، نه محصول نهایی آماده",
-                "محتوای واقعی و تصاویر در مراحل بعد اضافه می‌شود",
-            ],
-        }
 
     spec = _build_spec(scenario, understanding, website_intent, raw_text)
 
@@ -249,39 +248,13 @@ def _task_dashboard_spec(raw_text: str = "") -> dict:
     real task storage/backend yet, consistent with known_limitations
     in generate()'s dashboard branch above).
 
-    Puzzle: "Fix empty fake recommendation detail screens" — both
-    "داشبورد کارها و جلسات" and "تقسیم وظایف بین افراد" currently share
-    the task_dashboard_mockup archetype, but must still produce
-    genuinely different previews (per acceptance Test 2). raw_text
-    already includes the confirmed_recommendation_scope text (appended
-    in-memory by generate_preview_endpoint), so a simple keyword check
-    for "تقسیم وظایف" / team-assignment language is enough to switch
-    the column labels from generic status to per-person assignment,
-    without a separate archetype or Builder refactor.
+    Legacy Replacement Sprint (Phase 4): "تقسیم وظایف بین افراد" now has
+    its own dedicated team_task_board_mockup archetype (see
+    _team_task_board_spec below) instead of sharing this one — this
+    function only ever produces the generic individual/status-based
+    dashboard now.
     """
-    text = raw_text or ""
-    is_team_focused = any(k in text for k in ["تقسیم وظایف", "بین افراد", "اعضای تیم", "هر نفر"])
-    is_meetings_focused = any(k in text for k in ["جلسات", "جلسه", "میتینگ"])
-
-    if is_team_focused:
-        return {
-            "name": "تقسیم وظایف تیم",
-            "tagline": "هر کار مال کیست؟ — یک پیش‌نمایش اولیه",
-            "type": "تقسیم وظایف بین افراد",
-            "color": "#2563EB",
-            "color2": "#60A5FA",
-            "nav_items": ["خانه"],
-            "features": ["تعیین مسئول هر کار", "وضعیت انجام کارهای هر نفر", "مهلت‌ها و یادآوری‌ها"],
-            "dashboard_columns": [
-                {"label": "علی", "tasks": ["تهیه گزارش هفتگی", "هماهنگی با تیم فروش"]},
-                {"label": "مریم", "tasks": ["بررسی درخواست‌های مشتریان", "تنظیم برنامه هفته بعد"]},
-                {"label": "رضا", "tasks": ["ارسال فاکتور ماه قبل", "بایگانی اسناد قدیمی"]},
-            ],
-            "dashboard_meetings": [
-                {"time": "۱۰:۰۰", "title": "جلسه هماهنگی تیم"},
-                {"time": "۱۶:۰۰", "title": "بررسی پیشرفت هفتگی با اعضا"},
-            ],
-        }
+    is_meetings_focused = any(k in (raw_text or "") for k in ["جلسات", "جلسه", "میتینگ"])
 
     return {
         "name": "داشبورد کارهای اداری" if is_meetings_focused else "داشبورد ساده وظایف",
@@ -300,6 +273,43 @@ def _task_dashboard_spec(raw_text: str = "") -> dict:
             {"time": "۱۰:۰۰", "title": "جلسه هماهنگی تیم"},
             {"time": "۱۳:۳۰", "title": "بررسی وضعیت پروژه با مدیر"},
             {"time": "۱۶:۰۰", "title": "تماس با تأمین‌کننده"},
+        ],
+    }
+
+
+def _team_task_board_spec(raw_text: str = "") -> dict:
+    """
+    Dedicated spec for team_task_board_mockup (Legacy Replacement
+    Sprint, Phase 4) — "تقسیم وظایف بین افراد" is now its own archetype,
+    not a variant sharing task_dashboard_mockup. Reuses
+    build_team_task_board_sections() (section_model.py), which renders
+    per-person task columns + deadlines, never status-only columns.
+    """
+    return {
+        "name": "تقسیم وظایف تیم",
+        "tagline": "هر کار مال کیست؟ — یک پیش‌نمایش اولیه",
+        "type": "تقسیم وظایف بین افراد",
+        "color": "#2563EB",
+        "color2": "#60A5FA",
+        "nav_items": ["خانه"],
+        "features": ["تعیین مسئول هر کار", "وضعیت انجام کارهای هر نفر", "مهلت‌ها و یادآوری‌ها"],
+        "team_members": [
+            {"name": "علی", "tasks": [
+                {"title": "تهیه گزارش هفتگی", "deadline": "امروز", "status": "در حال انجام"},
+                {"title": "هماهنگی با تیم فروش", "deadline": "فردا", "status": "انجام‌نشده"},
+            ]},
+            {"name": "مریم", "tasks": [
+                {"title": "بررسی درخواست‌های مشتریان", "deadline": "امروز", "status": "در حال انجام"},
+                {"title": "تنظیم برنامه هفته بعد", "deadline": "این هفته", "status": "انجام‌نشده"},
+            ]},
+            {"name": "رضا", "tasks": [
+                {"title": "ارسال فاکتور ماه قبل", "deadline": "گذشته", "status": "انجام‌شده"},
+                {"title": "بایگانی اسناد قدیمی", "deadline": "این هفته", "status": "انجام‌نشده"},
+            ]},
+        ],
+        "team_meetings": [
+            {"time": "۱۰:۰۰", "title": "جلسه هماهنگی تیم"},
+            {"time": "۱۶:۰۰", "title": "بررسی پیشرفت هفتگی با اعضا"},
         ],
     }
 
@@ -339,16 +349,49 @@ def _digital_menu_order_spec(domain: str = "") -> dict:
     }
 
 
-def _service_portfolio_spec(domain: str = "") -> dict:
+def _service_portfolio_spec(raw_text: str = "") -> dict:
     """
     Minimal "صفحه نمونه‌کار + فرم درخواست سفارش" spec — portfolio cards
     (using the same menu_grid section/renderer, since it already
     supports image/title/desc cards) + a request/contact form.
     Explicitly NO unrelated shop/product/booking sections.
+
+    Legacy Replacement Sprint (Phase 8): genuinely context-aware instead
+    of always showing placeholder "نمونه‌کار ۱/۲/۳" text — detects
+    tailoring/sewing keywords in the full raw request and uses real
+    tailoring-specific portfolio items + service names. Falls back to
+    safe neutral placeholders (never an unrelated business like a
+    leather goods store) when the specific business type isn't
+    recognized — neutral, not wrong, is the safe default.
     """
-    name = domain if domain and len(domain) <= 24 else "نمونه‌کارهای ما"
+    text = raw_text or ""
+    is_tailoring = any(k in text for k in ["خیاط", "خیاطی", "دوخت", "اصلاح لباس", "لباس"])
+
+    if is_tailoring:
+        return {
+            "name": "نمونه‌کارهای خیاطی",
+            "tagline": "نمونه کارهای قبلی را ببین، بعد سفارش بده",
+            "type": "صفحه نمونه‌کار و فرم درخواست سفارش",
+            "color": "#7C3AED",
+            "color2": "#A78BFA",
+            "hero_btn": "مشاهده نمونه‌کارها",
+            "hero_btn2": "ثبت درخواست سفارش",
+            "nav_items": ["خانه", "نمونه‌کارها", "خدمات", "درخواست سفارش", "تماس"],
+            "features": ["گالری نمونه‌کارهای دوخت", "خدمات دوخت و اصلاح لباس", "فرم درخواست سفارش", "اطلاعات تماس"],
+            "menu_items": [
+                {"icon": "👗", "name": "دوخت لباس مجلسی", "desc": "طراحی و دوخت سفارشی", "price": ""},
+                {"icon": "✂️", "name": "اصلاح و تعمیر لباس", "desc": "تنگ‌کردن، تعویض زیپ، تعمیر", "price": ""},
+                {"icon": "🧵", "name": "دوخت لباس روزمره", "desc": "ساده، دقیق، به‌اندازه شما", "price": ""},
+            ],
+            "why_us": [
+                {"icon": "✅", "title": "کیفیت دوخت", "desc": "نمونه‌کارهای واقعی قبل از سفارش"},
+                {"icon": "📝", "title": "درخواست ساده", "desc": "فقط فرم را پر کن، بقیه را بسپار به ما"},
+            ],
+            "about": "قبل از سفارش، نمونه کارهای قبلی دوخت و اصلاح را ببین و بعد با فرم ساده درخواست بده.",
+        }
+
     return {
-        "name": name,
+        "name": "نمونه‌کارهای ما",
         "tagline": "نمونه کارهای قبلی را ببین، بعد درخواست بده",
         "type": "صفحه نمونه‌کار و فرم درخواست سفارش",
         "color": "#7C3AED",
@@ -850,29 +893,25 @@ def _store_spec(domain: str = ""):
         }
 
     return {
-        "name": "فروشگاه آنلاین برتر",
-        "tagline": "خرید آسان، تحویل سریع، کیفیت تضمینی",
-        "type": "فروشگاه اینترنتی",
+        "name": "محصول شما",
+        "tagline": "نمایش محصولات، قیمت و راه سفارش ساده",
+        "type": "کاتالوگ محصول و سفارش ساده",
         "color": "#15803D",
         "color2": "#4ADE80",
         "hero_btn": "مشاهده محصولات",
-        "hero_btn2": "پیشنهادهای ویژه",
-        "nav_items": ["خانه", "محصولات", "تخفیف‌ها", "سبد خرید", "تماس"],
-        "features": ["نمایش محصولات با تصویر", "سبد خرید آنلاین", "پرداخت امن", "پیگیری سفارش"],
+        "hero_btn2": "ثبت سفارش ساده",
+        "nav_items": ["خانه", "محصولات", "سفارش", "تماس"],
+        "features": ["نمایش محصولات با عکس و قیمت", "فرم سفارش ساده", "اطلاعات تماس"],
         "menu_items": [
-            {"icon": "👕", "name": "تیشرت کلاسیک", "desc": "نخ پنبه، رنگ‌بندی متنوع", "price": "۱۲۰,۰۰۰"},
-            {"icon": "👜", "name": "کیف چرم", "desc": "چرم طبیعی، دست‌دوز", "price": "۸۵۰,۰۰۰"},
-            {"icon": "⌚", "name": "ساعت مردانه", "desc": "ضدآب، گارانتی یک‌ساله", "price": "۴۵۰,۰۰۰"},
-            {"icon": "👟", "name": "کفش اسپرت", "desc": "سایزبندی کامل", "price": "۶۵۰,۰۰۰"},
-            {"icon": "🎒", "name": "کوله پشتی", "desc": "ضدآب، جادار", "price": "۲۸۰,۰۰۰"},
-            {"icon": "🕶️", "name": "عینک آفتابی", "desc": "محافظ UV، طراحی مدرن", "price": "۱۹۰,۰۰۰"},
+            {"icon": "🛍️", "name": "محصول ۱", "desc": "توضیح کوتاه محصول", "price": ""},
+            {"icon": "🛍️", "name": "محصول ۲", "desc": "توضیح کوتاه محصول", "price": ""},
+            {"icon": "🛍️", "name": "محصول ۳", "desc": "توضیح کوتاه محصول", "price": ""},
         ],
         "why_us": [
-            {"icon": "🚚", "title": "ارسال سریع", "desc": "تحویل ۱ تا ۲ روز کاری"},
-            {"icon": "🔒", "title": "خرید امن", "desc": "پرداخت با درگاه معتبر"},
-            {"icon": "↩️", "title": "ضمانت بازگشت", "desc": "۷ روز ضمانت بازگشت کالا"},
+            {"icon": "✅", "title": "سفارش ساده", "desc": "بدون پیچیدگی، فقط چند کلیک"},
+            {"icon": "📦", "title": "اطلاعات شفاف", "desc": "قیمت و توضیح هر محصول مشخص است"},
         ],
-        "about": "ما محصولات با کیفیت را با بهترین قیمت و سریع‌ترین زمان ارسال، مستقیم به دست شما می‌رسانیم.",
+        "about": "محصولات ما را ببینید و با یک فرم ساده سفارش خود را ثبت کنید.",
     }
 
 
