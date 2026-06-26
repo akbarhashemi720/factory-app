@@ -287,6 +287,50 @@ def build_task_dashboard_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return sections
 
 
+def build_crm_followup_sections(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Dedicated section order for the simple_crm_followup_mockup preview
+    archetype (Puzzle: "Fix selected option propagation"). Deliberately
+    different from BOTH the marketing-website sections (menu_grid/
+    gallery/benefits/about/form) AND build_task_dashboard_sections — the
+    main content is a single `crm_followup` section (customer list with
+    status/last-contact/next-step), not task columns and not a booking
+    form.
+
+      1. Simple navbar
+      2. Small hero (title/subtitle only)
+      3. Customer follow-up list — the actual main content
+      4. Minimal footer
+    """
+    sections: list[dict[str, Any]] = []
+
+    sections.append(new_block("navbar", {
+        "logo_text": spec.get("name", "لیست پیگیری مشتری‌ها"),
+        "nav_items": spec.get("nav_items", ["خانه"]),
+    }))
+
+    sections.append(new_block("hero", {
+        "badge": f"پیش‌نمایش اولیه • {spec.get('type', 'لیست پیگیری مشتری‌ها')}",
+        "title": spec.get("name", "لیست پیگیری مشتری‌ها"),
+        "subtitle": spec.get("tagline", ""),
+        "primary_button": "",
+        "secondary_button": "",
+    }))
+
+    sections.append(new_block("crm_followup", {
+        "title": "مشتری‌ها و وضعیت پیگیری",
+        "subtitle": "نمای ساده از مرحله پیگیری هرکدام — این فقط یک پیش‌نمایش اولیه است",
+        "customers": spec.get("crm_customers", []),
+    }))
+
+    sections.append(new_block("footer", {
+        "site_name": spec.get("name", "لیست پیگیری مشتری‌ها"),
+        "tagline": "این یک پیش‌نمایش اولیه است، نه یک سیستم CRM واقعی",
+    }))
+
+    return sections
+
+
 def apply_section_edit(sections: list[dict[str, Any]], section_id: str,
                         field_key: str, new_value: Any) -> list[dict[str, Any]]:
     """Update one content field on one section, return the new sections list."""
