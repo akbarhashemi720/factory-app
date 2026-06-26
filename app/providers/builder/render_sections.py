@@ -377,6 +377,53 @@ def _render_crm_followup(sid: str, c: dict, color: str, color2: str, overrides: 
     </div>"""
 
 
+def _render_team_task_board(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
+    """
+    Team Task Board Mockup (Legacy Replacement Sprint, Phase 4) — per-
+    person columns, each showing that person's tasks with a deadline
+    and status badge. Genuinely different from _render_task_dashboard
+    (status-only columns shared across everyone) and from
+    _render_crm_followup (customer rows) — this is "who owns what",
+    not "what stage is each task in" or "who are our customers".
+    """
+    title = c.get("title", "")
+    subtitle = c.get("subtitle", "")
+    title_html = _el(sid, f"{sid}-title", "section_title", title, f'<div class="section-title">{title}</div>', "ed-el-block", overrides)
+    subtitle_html = _el(sid, f"{sid}-subtitle", "subtitle", subtitle, f'<div class="section-sub">{subtitle}</div>', "ed-el-block", overrides)
+
+    members_html = ""
+    for member in c.get("team_members", []):
+        tasks_html = "".join(
+            f'''<div class="team-task-row">
+                  <div class="team-task-title">{t.get("title", "")}</div>
+                  <div class="team-task-deadline">{t.get("deadline", "")}</div>
+                  <div class="team-task-status">{t.get("status", "")}</div>
+                </div>'''
+            for t in member.get("tasks", [])
+        )
+        members_html += f"""
+        <div class="team-col">
+          <div class="team-col-name">{member.get("name", "")}</div>
+          {tasks_html}
+        </div>"""
+
+    meetings_html = "".join(
+        f'''<div class="dash-meeting-row">
+              <div class="dash-meeting-time">{m.get("time", "")}</div>
+              <div class="dash-meeting-title">{m.get("title", "")}</div>
+            </div>'''
+        for m in c.get("team_meetings", [])
+    )
+
+    return f"""
+    <div class="section team-section"{_bg_style_attr(section_bg)}>
+      {title_html}
+      {subtitle_html}
+      <div class="team-board">{members_html}</div>
+      {f'<div class="dash-meetings-wrap"><div class="dash-meetings-title">جلسات تیم</div>{meetings_html}</div>' if meetings_html else ''}
+    </div>"""
+
+
 def _render_gallery(sid: str, c: dict, color: str, color2: str, overrides: dict, section_bg: str | None = None) -> str:
     n = c.get("item_count", 4)
     items = "".join(
@@ -566,6 +613,7 @@ _RENDERERS = {
     "hero": _render_hero,
     "menu_grid": _render_menu_grid,
     "task_dashboard": _render_task_dashboard,
+    "team_task_board": _render_team_task_board,
     "crm_followup": _render_crm_followup,
     "gallery": _render_gallery,
     "about": _render_about,
@@ -586,6 +634,7 @@ SECTION_TYPE_LABEL_FA = {
     "hero": "بخش اصلی سایت",
     "menu_grid": "بخش منو",
     "task_dashboard": "بخش داشبورد وظایف",
+    "team_task_board": "بخش تقسیم وظایف تیم",
     "crm_followup": "بخش پیگیری مشتری‌ها",
     "gallery": "گالری تصاویر",
     "about": "بخش درباره ما",
@@ -698,6 +747,16 @@ _BASE_CSS = """
   .crm-status {{ color:{color}; font-weight:600; }}
   .crm-last-contact {{ color:#8a7a6e; }}
   .crm-next-step {{ color:#4a3f3a; }}
+
+  /* ── Team Task Board Mockup (Legacy Replacement Sprint, Phase 4) ───── */
+  .team-section {{ background:#F4F6F8; }}
+  .team-board {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; margin-bottom:32px; }}
+  .team-col {{ background:#fff; border-radius:{radius}; padding:16px; box-shadow:0 2px 10px rgba(45,36,36,0.06); }}
+  .team-col-name {{ font-weight:700; font-size:0.92rem; color:#2D2424; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid {color}33; }}
+  .team-task-row {{ background:#FAFAFA; border-radius:8px; padding:10px 12px; margin-bottom:8px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }}
+  .team-task-title {{ font-size:0.84rem; color:#2D2424; margin-bottom:4px; }}
+  .team-task-deadline {{ font-size:0.74rem; color:#8a7a6e; display:inline-block; margin-left:8px; }}
+  .team-task-status {{ font-size:0.74rem; color:{color}; font-weight:600; display:inline-block; }}
 """
 
 # ── Luxury theme override (cafe_luxury_premium) ─────────────────────────────
