@@ -65,11 +65,64 @@ _TOOL_LABELS_FA = {
     "simple_finance_dashboard":  "داشبورد ساده فروش و هزینه",
     "income_order_log":          "ثبت سفارش‌ها و درآمدها",
     "simple_periodic_report":    "گزارش روزانه/هفتگی ساده",
+    # Puzzle: "Fix selected option propagation" — exact admin/task-org
+    # options requested, each with its OWN distinct archetype so picking
+    # a different option genuinely produces a different preview.
+    "task_dashboard":            "داشبورد کارها و جلسات",
+    "client_followup_list":      "لیست پیگیری مشتری‌ها",
+    "team_task_board":           "تقسیم وظایف بین افراد",
+}
+
+# ── tool_key -> preview_archetype (THE core fix) ─────────────────────────────
+# Previously, only the top-level factory_recommendation carried a
+# preview_archetype — individual options did not, so picking a
+# non-recommended option (e.g. "لیست پیگیری مشتری‌ها") had NO archetype
+# at all. The frontend then fell through to the old website-section
+# diagnostic flow (mock_pm), which asked unrelated sales/booking
+# questions and could render a completely unrelated salon/booking
+# preview. Now every tool_key that can appear as a selectable option is
+# mapped here, and build_need_first_text()/the frontend attach this
+# archetype to EACH option, not just the recommended one.
+_TOOL_ARCHETYPES: dict[str, str] = {
+    "digital_menu_order": "digital_menu_order_page",
+    "walkin_landing": "lead_landing_page",
+    "customer_followup": "simple_crm_followup_mockup",
+    "cafe_intro_site": "lead_landing_page",
+    "cafe_intro_menu_site": "digital_menu_order_page",
+    "special_offer_landing": "lead_landing_page",
+    "portfolio_request_form": "service_portfolio_request_page",
+    "service_price_intro": "service_portfolio_request_page",
+    "measurement_booking": "booking_page_mockup",
+    "catalog_order": "product_catalog_order_page",
+    "brand_intro_page": "lead_landing_page",
+    "quick_order_form": "product_catalog_order_page",
+    "new_customer_acquisition": "lead_landing_page",
+    "digital_menu_order_goal": "digital_menu_order_page",
+    "returning_customer_tool": "simple_crm_followup_mockup",
+    "digital_menu_simple_order": "digital_menu_order_page",
+    "quick_order_form_goal": "product_catalog_order_page",
+    "simple_order_bot": "digital_menu_order_page",  # bot not buildable yet; closest honest mockup
+    "customer_landing_offer": "lead_landing_page",
+    "digital_menu_fast_decision": "digital_menu_order_page",
+    "contact_or_booking_form": "booking_page_mockup",
+    "simple_task_dashboard_goal": "task_dashboard_mockup",
+    "order_request_form": "service_portfolio_request_page",
+    "customer_followup_list": "simple_crm_followup_mockup",
+    "simple_finance_dashboard": "task_dashboard_mockup",  # closest existing dashboard archetype
+    "income_order_log": "task_dashboard_mockup",
+    "simple_periodic_report": "task_dashboard_mockup",
+    "task_dashboard": "task_dashboard_mockup",
+    "client_followup_list": "simple_crm_followup_mockup",
+    "team_task_board": "task_dashboard_mockup",
 }
 
 
 def _opt(tool_key: str) -> dict[str, str]:
-    return {"tool_key": tool_key, "label": _TOOL_LABELS_FA[tool_key]}
+    return {
+        "tool_key": tool_key,
+        "label": _TOOL_LABELS_FA[tool_key],
+        "archetype": _TOOL_ARCHETYPES.get(tool_key),
+    }
 
 
 # ── Need-level clarification options for Test 5 (truly vague requests) ──────
@@ -192,12 +245,17 @@ def get_need_first_recommendation(raw_text: str) -> dict[str, Any]:
             "detected_pain_or_goal": "نظم‌دادن به کارها و جلسات",
             "business_context": "کارهای اداری",
             "user_named_tool_if_any": None,
+            # Puzzle: "Fix selected option propagation" — these 3 options
+            # are scoped to internal work management ONLY (no
+            # sales/booking/marketing options here), and each carries
+            # its OWN archetype (via _opt -> _TOOL_ARCHETYPES) so picking
+            # a different one genuinely produces a different preview.
             "recommended_options": [
-                _opt("simple_task_dashboard_goal"),
-                _opt("order_request_form"),
-                _opt("customer_followup_list"),
+                _opt("task_dashboard"),
+                _opt("client_followup_list"),
+                _opt("team_task_board"),
             ],
-            "factory_recommendation": "simple_task_dashboard_goal",
+            "factory_recommendation": "task_dashboard",
             "factory_recommendation_combo_label": "داشبورد ساده وظایف + جلسات",
             "reason_for_recommendation": (
                 "چون درخواست تو بیشتر درباره نظم‌دادن به کارها و جلسات است، نه ساخت یک سایت تبلیغاتی."
@@ -397,7 +455,8 @@ def get_goal_based_recommendation(raw_text: str, goal_label: str) -> dict[str, A
         "business_context": "کافه" if is_cafe else None,
         "user_named_tool_if_any": None,
         "recommended_options": [
-            {"tool_key": o["tool_key"], "label": o["label"]} for o in entry["recommended_options"]
+            {"tool_key": o["tool_key"], "label": o["label"], "archetype": _TOOL_ARCHETYPES.get(o["tool_key"])}
+            for o in entry["recommended_options"]
         ],
         "recommended_options_explanations": {
             o["tool_key"]: o["explanation"] for o in entry["recommended_options"] if o.get("explanation")
