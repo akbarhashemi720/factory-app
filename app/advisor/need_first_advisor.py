@@ -116,6 +116,7 @@ def get_need_first_recommendation(raw_text: str) -> dict[str, Any]:
                 "و مشتری راحت‌تر انتخاب و سفارش می‌دهد."
             ),
             "needs_clarification": False,
+            "preview_archetype": "digital_menu_order_page",
         }
 
     # ── Example 2: explicit "سایت کافه لوکس" — still advise, don't just build ──
@@ -135,6 +136,7 @@ def get_need_first_recommendation(raw_text: str) -> dict[str, Any]:
                 "چون برای کافه لوکس، هم حس برند مهم است و هم مشتری باید سریع منو را ببیند."
             ),
             "needs_clarification": False,
+            "preview_archetype": "digital_menu_order_page",
         }
 
     # ── Example 3: tailoring / attracting more customers ───────────────────
@@ -154,6 +156,7 @@ def get_need_first_recommendation(raw_text: str) -> dict[str, Any]:
                 "چون مشتری قبل از تماس باید کیفیت کارها را ببیند و بعد راحت درخواست بدهد."
             ),
             "needs_clarification": False,
+            "preview_archetype": "service_portfolio_request_page",
         }
 
     # ── Example 4: homemade food / pickles — selling a home product ────────
@@ -175,6 +178,48 @@ def get_need_first_recommendation(raw_text: str) -> dict[str, Any]:
                 "چون مشتری باید محصول، قیمت و راه سفارش را سریع ببیند."
             ),
             "needs_clarification": False,
+            "preview_archetype": "product_catalog_order_page",
+        }
+
+    # ── Example 4.5: admin/office task & meeting organization — a CLEAR
+    # input that should go straight to a dashboard recommendation, never
+    # through the generic vague-goal clarification (the gap this puzzle
+    # fixes: "برای نظم کارهای اداری ام ... نظم بدم به کارهام و جلساتم"
+    # used to fall through to "فروش بیشتر / مشتری بیشتر / ..." options). ──
+    if any(k in text for k in ["نظم", "سازمان‌دهی", "مدیریت کارها", "مدیریت کار"]) and \
+       any(k in text for k in ["کار", "کارها", "کارهام", "اداری", "جلسات", "جلسه"]):
+        return {
+            "detected_pain_or_goal": "نظم‌دادن به کارها و جلسات",
+            "business_context": "کارهای اداری",
+            "user_named_tool_if_any": None,
+            "recommended_options": [
+                _opt("simple_task_dashboard_goal"),
+                _opt("order_request_form"),
+                _opt("customer_followup_list"),
+            ],
+            "factory_recommendation": "simple_task_dashboard_goal",
+            "factory_recommendation_combo_label": "داشبورد ساده وظایف + جلسات",
+            "reason_for_recommendation": (
+                "چون درخواست تو بیشتر درباره نظم‌دادن به کارها و جلسات است، نه ساخت یک سایت تبلیغاتی."
+            ),
+            "needs_clarification": False,
+            "preview_archetype": "task_dashboard_mockup",
+            # This is the kind of request where it can genuinely help to
+            # know if it's just for the user or a whole team — but ONLY
+            # as a button-based follow-up, never a blank textbox (Puzzle
+            # requirement #2). Optional: the frontend may choose to ask
+            # this before final confirmation; the recommendation itself
+            # does not require it to proceed.
+            "optional_followup_question": (
+                "آیا این سیستم فقط برای استفاده شخصی شماست یا می‌خواهید "
+                "تیمی از چند نفر هم از آن استفاده کند؟"
+            ),
+            "optional_followup_options": [
+                "فقط برای خودم",
+                "برای تیم چند نفره",
+                "هم خودم هم تیم",
+                "مطمئن نیستم، پیشنهاد بده",
+            ],
         }
 
     # ── Example 5: truly vague — ask a need-level question, never a
@@ -224,6 +269,7 @@ _CAFE_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
             "چون برای کافه معمولاً اول باید مشتری راحت کافه، فضا، منو، آدرس و پیشنهاد ویژه را ببیند؛ "
             "بعداً می‌شود سفارش یا باشگاه مشتریان اضافه کرد."
         ),
+        "preview_archetype": "lead_landing_page",
     },
     "سفارش راحت‌تر": {
         "detected_pain_or_goal": "راحت‌تر کردن سفارش‌گیری کافه",
@@ -235,6 +281,7 @@ _CAFE_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
         "factory_recommendation": "digital_menu_simple_order",
         "factory_recommendation_combo_label": _TOOL_LABELS_FA["digital_menu_simple_order"],
         "reason_for_recommendation": "چون برای شروع سریع‌تر و سبک‌تر از اپلیکیشن یا فروشگاه کامل است.",
+        "preview_archetype": "digital_menu_order_page",
     },
     "مشتری بیشتر": {
         "detected_pain_or_goal": "جذب مشتری بیشتر برای کافه",
@@ -248,6 +295,7 @@ _CAFE_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
         "reason_for_recommendation": (
             "چون قبل از هرچیز باید مشتری جدید کافه را ببیند و سریع تصمیم بگیرد بیاید."
         ),
+        "preview_archetype": "lead_landing_page",
     },
     "نظم در کارها": {
         "detected_pain_or_goal": "نظم بیشتر در کارهای روزانه کافه",
@@ -259,6 +307,7 @@ _CAFE_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
         "factory_recommendation": "simple_task_dashboard_goal",
         "factory_recommendation_combo_label": _TOOL_LABELS_FA["simple_task_dashboard_goal"],
         "reason_for_recommendation": "چون برای شروع، یک نمای ساده از کارها و وضعیتشان کافی است.",
+        "preview_archetype": "task_dashboard_mockup",
     },
     "دیدن حساب‌ها یا گزارش‌ها": {
         "detected_pain_or_goal": "دیدن ساده حساب‌ها و گزارش‌های کافه",
@@ -270,6 +319,7 @@ _CAFE_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
         "factory_recommendation": "simple_finance_dashboard",
         "factory_recommendation_combo_label": _TOOL_LABELS_FA["simple_finance_dashboard"],
         "reason_for_recommendation": "چون برای شروع، یک نمای ساده از درآمد و هزینه کافی است.",
+        "preview_archetype": "task_dashboard_mockup",
     },
 }
 
@@ -287,6 +337,7 @@ _GENERIC_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
         "factory_recommendation": "catalog_order",
         "factory_recommendation_combo_label": _TOOL_LABELS_FA["catalog_order"],
         "reason_for_recommendation": "چون مشتری باید محصول یا خدمت و راه سفارش را سریع ببیند.",
+        "preview_archetype": "product_catalog_order_page",
     },
     "سفارش راحت‌تر": _CAFE_GOAL_RECOMMENDATIONS["سفارش راحت‌تر"],
     "مشتری بیشتر": {
@@ -299,6 +350,7 @@ _GENERIC_GOAL_RECOMMENDATIONS: dict[str, dict[str, Any]] = {
         "factory_recommendation": "customer_landing_offer",
         "factory_recommendation_combo_label": _TOOL_LABELS_FA["customer_landing_offer"],
         "reason_for_recommendation": "چون قبل از هرچیز باید مشتری جدید کارت را ببیند و سریع تصمیم بگیرد.",
+        "preview_archetype": "lead_landing_page",
     },
     "نظم در کارها": _CAFE_GOAL_RECOMMENDATIONS["نظم در کارها"],
     "دیدن حساب‌ها یا گزارش‌ها": _CAFE_GOAL_RECOMMENDATIONS["دیدن حساب‌ها یا گزارش‌ها"],
@@ -354,4 +406,5 @@ def get_goal_based_recommendation(raw_text: str, goal_label: str) -> dict[str, A
         "factory_recommendation_combo_label": entry.get("factory_recommendation_combo_label"),
         "reason_for_recommendation": entry["reason_for_recommendation"],
         "needs_clarification": False,
+        "preview_archetype": entry.get("preview_archetype"),
     }
