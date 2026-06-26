@@ -706,6 +706,7 @@ def need_first_check(
         clarification_question=text_fields["clarification_question"],
         clarification_options=text_fields["clarification_options"],
         preview_archetype=text_fields["preview_archetype"],
+        recommended_proposed_sections=text_fields["recommended_proposed_sections"],
     )
 
 
