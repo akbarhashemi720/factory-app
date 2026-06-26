@@ -27,10 +27,20 @@ Design notes:
     self-contained here.
   - Only ever surfaces 2-3 options to the user, even though the
     factory may "consider" more tool types internally.
+
+Legacy Replacement Sprint (Phase 4): every archetype value used in this
+module's _TOOL_ARCHETYPES table MUST come from the single central list
+in app/contract/product_contract.py. _ASSERT_ALL_ARCHETYPES_VALID below
+runs at import time and raises immediately if any value here is not in
+that central list — this makes the "two diverging archetype lists"
+failure mode impossible to ship silently, without needing a separate
+test file.
 """
 from __future__ import annotations
 
 from typing import Any
+
+from app.contract.product_contract import VALID_ARCHETYPES
 
 
 # ── Internal product/tool vocabulary (never shown raw to the user — only
@@ -113,8 +123,20 @@ _TOOL_ARCHETYPES: dict[str, str] = {
     "simple_periodic_report": "task_dashboard_mockup",
     "task_dashboard": "task_dashboard_mockup",
     "client_followup_list": "simple_crm_followup_mockup",
-    "team_task_board": "task_dashboard_mockup",
+    "team_task_board": "team_task_board_mockup",
 }
+
+# Phase 4 structural guard: every archetype value above must exist in the
+# central VALID_ARCHETYPES list. This raises at import time (i.e. the
+# app fails to start) rather than allowing a silently-diverging list to
+# ship — the explicit alternative to a separate test file.
+_unknown_archetypes = {v for v in _TOOL_ARCHETYPES.values() if v not in VALID_ARCHETYPES}
+if _unknown_archetypes:
+    raise RuntimeError(
+        f"need_first_advisor._TOOL_ARCHETYPES references archetypes not in "
+        f"the central VALID_ARCHETYPES list: {_unknown_archetypes}. "
+        f"Update app/contract/product_contract.py or fix this table."
+    )
 
 
 # ── Proposed sections per tool_key (THE fix for "empty fake recommendation
